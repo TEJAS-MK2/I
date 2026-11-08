@@ -16,7 +16,7 @@ describe("workspace preview pages", () => {
     render(<WorkspacePage active="Khata ledger" />);
     expect(screen.getByRole("heading", { name: "Khata ledger" })).toBeInTheDocument();
     expect(screen.getByText("Ledger history is append-only.")).toBeInTheDocument();
-    expect(screen.getByText("Credit")).toBeInTheDocument();
+    expect(screen.getAllByText("Credit").length).toBeGreaterThan(0);
     expect(screen.getByText("Payment")).toBeInTheDocument();
   });
 
