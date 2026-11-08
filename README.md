@@ -36,6 +36,7 @@ Make everyday business operations easier for people who are busy serving custome
 - [x] Additive voice-session, intent-review, delivery, consent, notification-outbox and audit schema source (not deployed)
 - [x] India-time daily business summary view source (security-invoker; not deployed)
 - [x] Delivery create/assign/status RPCs with idempotency, role checks and cash-collection caps; JWT-verified Edge Function source (not deployed)
+- [x] Responsive Deliveries and Communications workspace pages wired to the new endpoints (live operations require hosted backend configuration)
 - [x] Channel consent and opt-in-gated idempotent notification queue RPCs; JWT-verified Edge Function source (queue only, no provider delivery)
 - [ ] Phase 8 production hardening
 
