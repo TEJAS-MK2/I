@@ -22,17 +22,49 @@ begin
 end $$;
 
 select public.create_customer(
-  '123e4567-e89b-42d3-a456-426614174100','New Customer','+919876543210'
+  '123e4567-e89b-42d3-a456-426614174100','New Customer','+919876543210','ci-customer-create-0001'
 )->>'customer_id' as customer_id \gset new_customer_
 select public.create_product(
-  '123e4567-e89b-42d3-a456-426614174100','Tea','kg',12000,4
+  '123e4567-e89b-42d3-a456-426614174100','Tea','kg',12000,4,'ci-product-create-0001'
 )->>'product_id' as product_id \gset new_product_
+select public.create_customer(
+  '123e4567-e89b-42d3-a456-426614174100','New Customer','+919876543210','ci-customer-create-0001'
+)->>'customer_id' as customer_id \gset new_customer_replay_
+select (:'new_customer_customer_id' = :'new_customer_replay_customer_id') as customer_replayed \gset
+\if :customer_replayed
+\echo 'PASS customer creation idempotency replay'
+\else
+\echo 'FAIL customer creation idempotency replay'
+\quit 1
+\endif
+select public.create_product(
+  '123e4567-e89b-42d3-a456-426614174100','Tea','kg',12000,4,'ci-product-create-0001'
+)->>'product_id' as product_id \gset new_product_replay_
+select (:'new_product_product_id' = :'new_product_replay_product_id') as product_replayed \gset
+\if :product_replayed
+\echo 'PASS product creation idempotency replay'
+\else
+\echo 'FAIL product creation idempotency replay'
+\quit 1
+\endif
 select set_config('test.created_product', :'new_product_product_id', false);
+
+do $master_data_key_mismatch$
+begin
+  begin
+    perform public.create_product(
+      '123e4567-e89b-42d3-a456-426614174100','Tea','kg',12000,5,'ci-product-create-0001'
+    );
+    raise exception 'expected product idempotency mismatch rejection';
+  exception when unique_violation then null;
+  end;
+end $master_data_key_mismatch$;
 
 do $master_data_test$
 begin
   if not exists (select 1 from public.customers where display_name='New Customer' and phone_e164='+919876543210') then raise exception 'customer creation failed'; end if;
   if (select stock_on_hand from public.products where id=current_setting('test.created_product')::uuid) <> 4 then raise exception 'opening stock not created'; end if;
+  if (select count(*) from public.inventory_movements where product_id=current_setting('test.created_product')::uuid and reason='opening_balance') <> 1 then raise exception 'opening stock audit movement duplicated or missing'; end if;
   if not exists (select 1 from public.inventory_movements where product_id=current_setting('test.created_product')::uuid and reason='opening_balance' and quantity_delta=4 and actor_id='123e4567-e89b-42d3-a456-426614174001') then raise exception 'opening stock audit movement missing'; end if;
 end $master_data_test$;
 
