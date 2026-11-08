@@ -23,14 +23,20 @@ The backend source in this directory is a reviewed implementation candidate. It 
 ## Edge Functions
 
 `functions/business-setup/index.ts` handles business onboarding plus customer and product creation through database RPCs.
-`functions/record-credit-sale/index.ts` verifies the bearer session with `auth.getUser`, validates request shape, and forwards the caller JWT to the database RPC. It never uses a service-role/secret key. Keep JWT verification enabled when deploying the function.
+`functions/record-credit-sale/index.ts` verifies the bearer session with `auth.getUser`, validates request shape, and forwards the caller JWT to the database RPC.\n\n`functions/reverse-credit-sale/index.ts` exposes the owner/admin-only compensating reversal RPC.\n\nAll three handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
 
 Required environment:
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY` (or legacy `SUPABASE_ANON_KEY`)
 - `APP_ORIGIN` (exact allowed web origin; set this before deployment)
 
-## API contract
+## API contracts
+
+POST `/functions/v1/business-setup`
+
+- `{"action":"create_business","name":"My Store"}`
+- `{"action":"create_customer","business_id":"UUID","display_name":"Ramesh","phone_e164":"+919876543210"}`
+- `{"action":"create_product","business_id":"UUID","name":"Sugar","unit_label":"kg","unit_price_paise":15000,"opening_stock":5}`
 
 POST `/functions/v1/record-credit-sale`
 
@@ -56,8 +62,8 @@ The caller must review the transcript, customer, currency, quantities and total,
 
 ## Not production-ready yet
 
-- Business/customer/product onboarding and invitations are not implemented.
-- Reversal RPC is implemented and database-tested; the reversal UI and customer-facing balance history are still required.
+- Business onboarding and customer/product creation RPCs are implemented and covered by isolated PostgreSQL CI; invitation and staff-membership lifecycle are still missing.
+- Reversal RPC and Edge Function source are implemented; the reversal UI and customer-facing balance history are still required.
 - No dedicated Boli-Khata Supabase project is provisioned or configured.
 - No secrets, authentication provider settings, email/SMS delivery, backups, monitoring, rate limits, or production deployment have been configured.
 - The SQL is currently executed against a disposable PostgreSQL 17 CI service with tenant-isolation, atomic stock/ledger, idempotency, reversal and append-only checks. A dedicated Supabase development project and Supabase-specific advisor review are still required before production deployment.
@@ -67,6 +73,6 @@ The caller must review the transcript, customer, currency, quantities and total,
 1. Apply schema to a dedicated development project only.
 2. Test tenant isolation, role permissions, insufficient stock, exact paise arithmetic, concurrent idempotency, append-only behavior and rollback with pgTAP.
 3. Run Supabase security/performance advisors and remediate all high-severity findings.
-4. Add authenticated onboarding and membership lifecycle.
-5. Implement full reversal and correction flows.
-6. Only then connect the frontend confirmation UI to the RPC.
+4. Add staff invitations, role management and business switching.
+5. Build customer, catalogue, khata and reversal UI workflows.
+6. Connect the frontend confirmation UI to the RPC only after the dedicated development environment passes its security review.
