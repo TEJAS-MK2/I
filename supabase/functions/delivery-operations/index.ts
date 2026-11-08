@@ -95,6 +95,7 @@ Deno.serve(async (request: Request) => {
       p_event_type: body.event_type,
       p_note: body.note ?? null,
       p_cash_collected_paise: body.cash_collected_paise ?? null,
+      p_confirmed: body.confirmed,
     };
   } else {
     return json(400, { error: "unsupported_action" });
