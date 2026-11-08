@@ -39,9 +39,16 @@ Authentication is not being expanded in this milestone. The existing secure
 membership/RLS foundation is preserved rather than replaced with anonymous
 database access. Provider credentials, scheduled outbox workers, messaging delivery,
 proof-of-delivery upload handlers and automated transcript-retention jobs are
-not configured by this schema alone. The included delivery and notification
-queue RPCs are database primitives; they are not yet exposed through Edge
-Function endpoints or connected to the frontend.
+not configured by this schema alone. The included delivery and consent/notification queue RPCs are exposed through
+JWT-verified Edge Function endpoints. They are not yet connected to the frontend.
+
+## API endpoints
+
+- `POST /functions/v1/delivery-operations`: create, assign and record delivery events.
+- `POST /functions/v1/customer-communication`: record channel consent and queue a notification.
+
+The queue endpoint does not send messages. A separately deployed worker and
+provider integration must re-check current consent immediately before delivery.
 
 ## Required verification before enabling these workflows
 
