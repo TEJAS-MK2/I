@@ -2,7 +2,7 @@
 
 ## Style
 
-Begin with a modular monolith: one API deployment with clearly separated domain modules. This avoids premature microservices while keeping boundaries explicit.
+Begin with a managed modular backend: Supabase Auth + PostgreSQL + narrowly scoped Edge Functions. Keep domain modules explicit and avoid premature microservices. PostgreSQL is the source of truth; Edge Functions are the authenticated API boundary.
 
 ## Current frontend layout
 
@@ -26,7 +26,7 @@ Begin with a modular monolith: one API deployment with clearly separated domain 
 └── vite.config.ts
 ```
 
-Introduce backend and shared-contract workspaces when backend implementation starts; do not add empty abstractions prematurely.
+Backend source and SQL live under `supabase/`; deterministic domain contracts live under `src/domain/`. Keep shared contracts small and avoid duplicate validation logic drifting between client and database.
 
 ## Domain modules
 
@@ -38,7 +38,7 @@ UI features call typed application services. Application services depend on doma
 
 ## Transaction boundary
 
-A sale that changes invoice, payment and stock commits in one database transaction. A repayment creates a ledger event and updates any materialized balance atomically. Database constraints remain the final guardrail.
+The current backend candidate commits a credit-sale header, item rows, customer ledger entry and stock decrements in one PostgreSQL transaction. A full reversal appends a compensating transaction, negative ledger entry and stock restorations. Database constraints remain the final guardrail.
 
 ## Tenant isolation
 
@@ -59,4 +59,4 @@ The browser speech implementation lives behind the `SpeechRecognitionProvider` i
 
 ## Proposal validation boundary
 
-`src/voice/transactionValidation.ts` performs deterministic client-side completeness checks for customer, amount, currency and detected item fields. It is deliberately not a server authorization or commit boundary. Production work must repeat validation on the server using authenticated business membership, catalogue/customer resolution, role permissions, idempotency and a database transaction before any financial or stock mutation.
+`src/voice/transactionValidation.ts` performs deterministic client-side completeness checks for customer, amount, currency and detected item fields. It is deliberately not a server authorization or commit boundary. The database candidate repeats validation using authenticated business membership, role permissions, catalogue/customer resolution, request-bound idempotency and one database transaction before financial or stock mutation. Its schema is CI-tested but not yet deployed to a dedicated hosted project.
