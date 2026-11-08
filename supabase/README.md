@@ -12,11 +12,12 @@ The backend source in this directory is a reviewed implementation candidate. It 
 - Money is stored as integer paise and currency is explicitly INR.
 - `business_transactions`, `transaction_items`, `ledger_entries` and `inventory_movements` are append-only.
 - Current product stock is a projection updated only inside the atomic transaction function; movement rows preserve the stock audit trail.
-- `create_business`, `create_customer` and `create_product` provide authenticated onboarding/master-data setup. Opening stock is captured as an append-only inventory movement.
+- `create_business`, `create_customer` and `create_product` provide authenticated, idempotent onboarding/master-data setup. Repeated request keys return the original resource; mismatched payloads are rejected. Opening stock is captured exactly once as an append-only inventory movement.
 - `record_credit_sale` performs the sale header, item rows, ledger entry and stock decrements in one Postgres transaction.
 - `reverse_credit_sale` appends a linked sale reversal, negative ledger entry and compensating stock movements; it refuses to reverse a sale whose value has already been settled.
-- `record_customer_payment` appends a negative payment ledger entry, enforces the outstanding balance ceiling and records the payment method.
+- `record_customer_payment` appends a negative payment ledger entry, enforces the outstanding balance ceiling under a customer-row lock and records the payment method.
 - `reverse_customer_payment` appends a positive compensating entry; it does not claim to refund or reverse an external bank/UPI transfer.
+- Credit sales, payments and reversals lock the customer row while checking balances to prevent concurrent overpayment or invalid sale reversal.
 - Idempotency keys are bound to a canonical request payload; reusing a key with a different payload is rejected.
 - Idempotency claims prevent duplicate commits on retries.
 - Client-facing tables have RLS and read-only grants. Direct client writes are intentionally unavailable.
@@ -42,9 +43,9 @@ Required environment:
 
 POST `/functions/v1/business-setup`
 
-- `{"action":"create_business","name":"My Store"}`
-- `{"action":"create_customer","business_id":"UUID","display_name":"Ramesh","phone_e164":"+919876543210"}`
-- `{"action":"create_product","business_id":"UUID","name":"Sugar","unit_label":"kg","unit_price_paise":15000,"opening_stock":5}`
+`{"action":"create_business","name":"My Store","idempotency_key":"..."}`
+- `{"action":"create_customer","business_id":"UUID","display_name":"Ramesh","phone_e164":"+919876543210","idempotency_key":"..."}`
+- `{"action":"create_product","business_id":"UUID","name":"Sugar","unit_label":"kg","unit_price_paise":15000,"opening_stock":5,"idempotency_key":"..."}`
 
 POST `/functions/v1/record-customer-payment`
 
