@@ -204,9 +204,8 @@ begin
     where m.business_id = p_business_id and m.user_id = v_actor
       and m.status = 'active' and m.role in ('owner','admin','cashier')
   ) then raise exception 'business access denied' using errcode = '42501'; end if;
-  if not exists (select 1 from public.customers c where c.id = p_customer_id and c.business_id = p_business_id) then
-    raise exception 'customer not found in this business' using errcode = '22023';
-  end if;
+  perform 1 from public.customers c where c.id = p_customer_id and c.business_id = p_business_id for update;
+  if not found then raise exception 'customer not found in this business' using errcode = '22023'; end if;
 
   v_fingerprint := jsonb_build_object('customer_id',p_customer_id,'amount_paise',p_amount_paise,'currency',p_currency,'items',p_items)::text;
   insert into public.idempotency_claims(business_id, actor_id, idempotency_key, request_fingerprint)
@@ -342,6 +341,8 @@ begin
     and t.transaction_type = 'credit_sale'
   for update;
   if not found then raise exception 'original sale not found' using errcode = '22023'; end if;
+  perform 1 from public.customers c where c.id=v_original.customer_id and c.business_id=p_business_id for update;
+  if not found then raise exception 'customer not found in this business' using errcode = '22023'; end if;
   if exists (select 1 from public.business_transactions r where r.reversal_of = v_original.id) then
     raise exception 'sale has already been reversed' using errcode = '23505';
   end if;
@@ -525,9 +526,8 @@ begin
     select 1 from public.business_memberships m where m.business_id=p_business_id
       and m.user_id=v_actor and m.status='active' and m.role in ('owner','admin','cashier')
   ) then raise exception 'business access denied' using errcode = '42501'; end if;
-  if not exists (select 1 from public.customers c where c.id=p_customer_id and c.business_id=p_business_id) then
-    raise exception 'customer not found in this business' using errcode = '22023';
-  end if;
+  perform 1 from public.customers c where c.id=p_customer_id and c.business_id=p_business_id for update;
+  if not found then raise exception 'customer not found in this business' using errcode = '22023'; end if;
 
   v_fingerprint := jsonb_build_object('customer_id',p_customer_id,'amount_paise',p_amount_paise,'currency',p_currency,'payment_method',p_payment_method)::text;
   insert into public.idempotency_claims(business_id,actor_id,idempotency_key,request_fingerprint)
@@ -604,6 +604,8 @@ begin
   where t.id=p_original_transaction_id and t.business_id=p_business_id and t.transaction_type='payment'
   for update;
   if not found then raise exception 'original payment not found' using errcode = '22023'; end if;
+  perform 1 from public.customers c where c.id=v_original.customer_id and c.business_id=p_business_id for update;
+  if not found then raise exception 'customer not found in this business' using errcode = '22023'; end if;
   if exists (select 1 from public.business_transactions r where r.reversal_of=v_original.id) then
     raise exception 'payment has already been reversed' using errcode = '23505';
   end if;
