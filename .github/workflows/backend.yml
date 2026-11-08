@@ -44,6 +44,8 @@ jobs:
         run: deno check supabase/functions/customer-communication/index.ts
       - name: Typecheck voice proposals endpoint
         run: deno check supabase/functions/voice-proposals/index.ts
+      - name: Typecheck inventory operations endpoint
+        run: deno check supabase/functions/inventory-operations/index.ts
 
   database:
     name: Postgres security and transaction tests
