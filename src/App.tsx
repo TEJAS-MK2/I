@@ -27,9 +27,10 @@ const activity = [
 
 function BusinessApp() {
   const { configured, user, signOut } = useAuth();
-  const { business, loading: businessLoading, error: businessError } = useBusiness();
+  const { business, loading: businessLoading, error: businessError, refresh: refreshBusiness } = useBusiness();
   if (configured && businessLoading) return <div className="auth-loading" role="status">Loading your business workspace…</div>;
-  if (configured && !business) return <><BusinessOnboarding/>{businessError && <p className="auth-error">{businessError}</p>}</>;
+  if (configured && !business && businessError) return <main className="auth-screen"><section className="auth-card"><div className="eyebrow">WORKSPACE ACCESS</div><h1>We couldn't load your shop.</h1><p className="auth-intro">{businessError}</p><button className="auth-submit" onClick={() => void refreshBusiness()}>Retry workspace access</button></section></main>;
+  if (configured && !business) return <BusinessOnboarding/>;
   const [active, setActive] = useState("Overview");
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
