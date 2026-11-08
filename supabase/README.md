@@ -12,6 +12,7 @@ The backend source in this directory is a reviewed implementation candidate. It 
 - Money is stored as integer paise and currency is explicitly INR.
 - `business_transactions`, `transaction_items`, `ledger_entries` and `inventory_movements` are append-only.
 - Current product stock is a projection updated only inside the atomic transaction function; movement rows preserve the stock audit trail.
+- `create_business`, `create_customer` and `create_product` provide authenticated onboarding/master-data setup. Opening stock is captured as an append-only inventory movement.
 - `record_credit_sale` performs the sale header, item rows, ledger entry and stock decrements in one Postgres transaction.
 - `reverse_credit_sale` appends a linked reversal, negative ledger entry and compensating stock movements; only owner/admin roles can reverse.
 - Idempotency keys are bound to a canonical request payload; reusing a key with a different payload is rejected.
@@ -19,8 +20,9 @@ The backend source in this directory is a reviewed implementation candidate. It 
 - Client-facing tables have RLS and read-only grants. Direct client writes are intentionally unavailable.
 - The privileged write implementation lives in the unexposed `private` schema, is SECURITY DEFINER with an empty search path, explicitly checks `auth.uid()` and active business membership, and is called through a public SECURITY INVOKER wrapper granted only to authenticated users.
 
-## Edge Function
+## Edge Functions
 
+`functions/business-setup/index.ts` handles business onboarding plus customer and product creation through database RPCs.
 `functions/record-credit-sale/index.ts` verifies the bearer session with `auth.getUser`, validates request shape, and forwards the caller JWT to the database RPC. It never uses a service-role/secret key. Keep JWT verification enabled when deploying the function.
 
 Required environment:
