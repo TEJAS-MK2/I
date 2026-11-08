@@ -424,7 +424,7 @@ begin
     raise exception 'business access denied' using errcode = '42501';
   end if;
   if p_display_name is null or length(trim(p_display_name)) not between 1 and 120 then raise exception 'customer name is required' using errcode = '22023'; end if;
-  if p_phone_e164 is not null and p_phone_e164 !~ '^\\+[1-9][0-9]{7,14}$' then raise exception 'phone must be E.164 format' using errcode = '22023'; end if;
+  if p_phone_e164 is not null and p_phone_e164 !~ '^\+[1-9][0-9]{7,14}$' then raise exception 'phone must be E.164 format' using errcode = '22023'; end if;
   insert into public.customers(business_id,display_name,phone_e164)
   values (p_business_id,trim(p_display_name),p_phone_e164) returning id into v_customer_id;
   return jsonb_build_object('customer_id',v_customer_id);
