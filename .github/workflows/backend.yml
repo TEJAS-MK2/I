@@ -28,6 +28,8 @@ jobs:
       - name: Resolve Deno dependencies
         working-directory: supabase/functions
         run: deno install
+      - name: Test Supabase publishable key resolution
+        run: deno test --allow-env supabase/functions/_shared/keys_test.ts
       - name: Typecheck credit sale endpoint
         run: deno check supabase/functions/record-credit-sale/index.ts
       - name: Typecheck reversal endpoint
