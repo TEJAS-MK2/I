@@ -6,8 +6,9 @@ Boli-Khata Supabase project.
 
 ## Included data capabilities
 
-- **Voice review:** session metadata, language tag, bounded transcript storage,
-  typed intent proposals, confidence, ambiguity flags and review lifecycle.
+- **Voice review:** authenticated proposal persistence, session metadata, language tag,
+  bounded transcript storage, confidence, ambiguity flags and idempotent review lifecycle.
+  Saving a proposal never commits a sale, payment or inventory change.
 - **Local logistics:** idempotent delivery creation, owner/admin assignment,
   guarded status transitions, append-only events and cash-collection limits.
 - **Customer communications:** explicit per-channel opt-in/opt-out recording,
@@ -44,8 +45,11 @@ JWT-verified Edge Function endpoints. They are not yet connected to the frontend
 
 ## API endpoints
 
+- `POST /functions/v1/voice-proposals`: save a reviewed voice/text proposal for later billing review.
 - `POST /functions/v1/delivery-operations`: create, assign and record delivery events.
 - `POST /functions/v1/customer-communication`: record channel consent and queue a notification.
+
+The voice endpoint only persists a review proposal; financial execution remains a separate billing action. Transcript expiry is set to 30 days, but the scheduled deletion worker is not yet configured.
 
 The queue endpoint does not send messages. A separately deployed worker and
 provider integration must re-check current consent immediately before delivery.
