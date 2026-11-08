@@ -17,7 +17,7 @@ describe("workspace preview pages", () => {
     expect(screen.getByRole("heading", { name: "Khata ledger" })).toBeInTheDocument();
     expect(screen.getByText("Ledger history is append-only.")).toBeInTheDocument();
     expect(screen.getAllByText("Credit").length).toBeGreaterThan(0);
-    expect(screen.getByText("Reversal")).toBeInTheDocument();
+    expect(screen.getAllByText("Reversal").length).toBeGreaterThan(0);
   });
 
   it("filters the product catalogue", () => {
