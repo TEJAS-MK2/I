@@ -32,6 +32,8 @@ jobs:
         run: deno check supabase/functions/record-credit-sale/index.ts
       - name: Typecheck reversal endpoint
         run: deno check supabase/functions/reverse-credit-sale/index.ts
+      - name: Typecheck business setup endpoint
+        run: deno check supabase/functions/business-setup/index.ts
 
   database:
     name: Postgres security and transaction tests
