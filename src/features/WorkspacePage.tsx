@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { BookOpen, Boxes, CreditCard, FileText, Search, ShoppingBag, Users } from "lucide-react";
+import { ArrowDownLeft, BookOpen, Boxes, CreditCard, FileText, Search, ShoppingBag, Users } from "lucide-react";
 import { useBusiness } from "../business/BusinessContext";
 import { supabase } from "../lib/supabase";
 import { rupeesToPaise, validateCreditSale } from "../domain/transaction";
