@@ -53,7 +53,7 @@ begin
 end $$;
 
 -- Reusing an idempotency key with a different payload must be rejected.
-do $
+do $idem_test$
 begin
   begin
     perform public.record_credit_sale(
@@ -66,10 +66,10 @@ begin
     raise exception 'expected idempotency fingerprint rejection';
   exception when unique_violation then null;
   end;
-end $;
+end $idem_test$;
 
 -- Authenticated clients cannot write ledger rows directly around the atomic RPC.
-do $
+do $direct_write_test$
 begin
   begin
     insert into public.ledger_entries(business_id,customer_id,transaction_id,entry_type,amount_paise,currency)
@@ -77,7 +77,7 @@ begin
     raise exception 'expected direct-write privilege rejection';
   exception when insufficient_privilege then null;
   end;
-end $;
+end $direct_write_test$;
 
 -- An overdrawn sale must fail and roll back its idempotency claim and all writes.
 do $$
