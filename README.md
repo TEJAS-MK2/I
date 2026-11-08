@@ -15,7 +15,8 @@ Make everyday business operations easier for people who are busy serving custome
 - [x] Product direction and initial technical blueprint
 - [x] Phase 1 foundation branch and project scaffold
 - [ ] Phase 1 review and acceptance
-- [ ] Phase 2 multilingual voice engine
+- [x] Phase 2 voice-provider boundary and review-only proposal prototype
+- [ ] Production speech provider and server-side transaction validation
 - [ ] Phase 3 customer and khata ledger
 - [ ] Phase 4 inventory and billing
 - [ ] Phase 5 transaction intelligence
