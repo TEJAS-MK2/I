@@ -3,6 +3,7 @@ import { ArrowDownLeft, BookOpen, Boxes, CreditCard, FileText, Search, ShoppingB
 import { useBusiness } from "../business/BusinessContext";
 import { supabase } from "../lib/supabase";
 import { rupeesToPaise, validateCreditSale } from "../domain/transaction";
+import { CommunicationsPage, LogisticsPage } from "./OperationsPages";
 
 type Props={active:string};
 type Customer={id:string;name:string;phone:string;balance:number;last:string};
@@ -301,5 +302,7 @@ export default function WorkspacePage({active}:Props){
  if(active==="Inventory")return <Inventory/>;
  if(active==="Sales & billing")return <Billing/>;
  if(active==="Payments")return <Payments/>;
+ if(active==="Deliveries")return <LogisticsPage/>;
+ if(active==="Communications")return <CommunicationsPage/>;
  return <><Header eyebrow="WORKSPACE" title={active} description="This workspace is being prepared for the first connected pilot." icon={FileText}/><Notice/><section className="workspace-panel empty-workspace"><ShoppingBag size={28}/><h2>{active} is on the roadmap</h2><p>Core business data and transaction safety are being built before enabling this workflow.</p></section></>;
 }
