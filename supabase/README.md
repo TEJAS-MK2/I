@@ -4,6 +4,10 @@
 
 The backend source in this directory is a reviewed implementation candidate. It has **not** been applied to a hosted Supabase project or deployed. The connected Supabase account currently exposes other projects, but none is identified as a dedicated Boli-Khata environment. Do not run this schema against an unrelated project.
 
+## Production rollout
+
+See [the production infrastructure runbook](../docs/PRODUCTION_RUNBOOK.md) for the dedicated-project requirements, migration order, Edge Function rollout, Vercel environment variables, smoke tests and rollback plan. The Edge Functions now prefer the current `SUPABASE_PUBLISHABLE_KEYS` environment dictionary and retain legacy-key compatibility. Authentication changes remain deferred; JWT verification and RLS must not be disabled.
+
 ## Architecture
 
 - Supabase Auth provides identity; the JWT subject is the actor identity.
