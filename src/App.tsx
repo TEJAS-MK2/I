@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import VoiceWorkspace from "./voice/VoiceWorkspace";
 import WorkspacePage from "./features/WorkspacePage";
+import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import {
   Activity, ArrowUpRight, Bell, BookOpen, Boxes, ChevronDown, CircleHelp,
   Command, CreditCard, LayoutDashboard, Mic, Package, Plus, Search,
@@ -22,7 +23,8 @@ const activity = [
   { name: "Maa Grocery", detail: "Today, 9:56 AM · Payment received", amount: "+₹800", type: "payment" },
 ];
 
-export default function App() {
+function BusinessApp() {
+  const { configured, user, signOut } = useAuth();
   const [active, setActive] = useState("Overview");
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
@@ -54,11 +56,11 @@ export default function App() {
         <button className="nav-item" onClick={() => setActive("Help & support")}><CircleHelp size={18} /><span>Help & support</span></button>
         <div className="sidebar-bottom">
           <div className="plan-card"><span className="plan-icon"><Zap size={16} /></span><strong>Your shop, at a glance</strong><p>Your daily business overview lives here. More tools are coming soon.</p><span className="plan-link">Explore the roadmap <ArrowUpRight size={13} /></span></div>
-          <div className="profile-row"><div className="profile-avatar">PS</div><div><strong>Priya Sharma</strong><small>Shop owner</small></div><button aria-label="Profile options"><ChevronDown size={16} /></button></div>
+          <div className="profile-row"><div className="profile-avatar">{(user?.email ?? "PS").slice(0,2).toUpperCase()}</div><div><strong>{user?.email?.split("@")[0] ?? "Preview owner"}</strong><small>{configured ? "Signed-in account" : "Demo workspace"}</small></div><button aria-label="Sign out" title="Sign out" onClick={() => { void signOut().catch(() => undefined); }}><ChevronDown size={16} /></button></div>
         </div>
       </aside>
       <main className="main-area">
-        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>{active}</strong></div><div className="top-actions"><span className={online ? "connection-chip online" : "connection-chip offline"} role="status"><i/>{online ? "Online" : "Offline · shell only"}</span><div className="search-box"><Search size={16} /><input aria-label="Search" placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button" aria-label="Notifications"><Bell size={18} /><i /></button><div className="top-avatar">PS</div></div></header>
+        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>{active}</strong></div><div className="top-actions"><span className={!configured ? "connection-chip preview" : online ? "connection-chip online" : "connection-chip offline"} role="status"><i/>{!configured ? "Preview mode" : online ? "Secure session" : "Offline · shell only"}</span><div className="search-box"><Search size={16} /><input aria-label="Search" placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button" aria-label="Notifications"><Bell size={18} /><i /></button><div className="top-avatar">{(user?.email ?? "PS").slice(0,2).toUpperCase()}</div></div></header>
         <div className="page-content">{active === "Overview" ? <>
           <section className="welcome-row"><div><div className="eyebrow"><span className="live-dot" /> YOUR BUSINESS AT A GLANCE</div><h1>Good morning, Priya <span>✳</span></h1><p>Here's what's happening with your store today.</p></div><button className="date-button">Today, 8 November <ChevronDown size={15} /></button></section>
           <section className="voice-banner"><div className="voice-orb"><Mic size={23} /></div><div className="voice-copy"><span className="voice-kicker">MEET YOUR BUSINESS ASSISTANT</span><h2>Your shop. Your language. Your pace.</h2><p>Speak naturally or type what you need. Boli-Khata is being built to make everyday shop work simpler.</p></div><button className="voice-button" onClick={() => setVoiceOpen(!voiceOpen)}><Mic size={17} /> Try voice workspace</button><div className="banner-decoration" /></section>
@@ -79,4 +81,9 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+
+export default function App() {
+  return <AuthProvider><BusinessApp /></AuthProvider>;
 }
