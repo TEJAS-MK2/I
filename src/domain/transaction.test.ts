@@ -37,6 +37,11 @@ describe("money and credit-sale domain", () => {
     expect(validateCreditSale({ ...valid, amountPaise: 30001 }).map(x => x.code)).toContain("amount_mismatch");
   });
 
+  it("rejects item quantities whose price would create fractional paise", () => {
+    const issues = validateCreditSale({ ...valid, amountPaise: 1, items: [{ ...valid.items[0], quantity: "0.001", unitPricePaise: 1 }] });
+    expect(issues.map(x => x.code)).toContain("invalid_amount");
+  });
+
   it("rejects zero quantities and non-integer paise prices", () => {
     const issues = validateCreditSale({ ...valid, items: [{ ...valid.items[0], quantity: "0", unitPricePaise: 12.5 }] });
     expect(issues.map(x => x.code)).toEqual(expect.arrayContaining(["invalid_quantity", "invalid_unit_price"]));
