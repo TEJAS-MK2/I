@@ -25,6 +25,7 @@ Make everyday business operations easier for people who are busy serving custome
 - [ ] Dedicated Supabase project, Auth configuration and hosted Edge Function deployment
 - [ ] Production speech provider and frontend confirmation integration
 - [x] Customer, khata, inventory and billing workspace screens; customer/ledger/inventory source is wired for a configured backend
+- [x] Voice proposal persistence endpoint and reviewed-proposal UI; proposals remain uncommitted until a separate billing action
 - [x] Installable PWA shell with static-only offline fallback
 - [x] Reviewed credit-sale billing and explicit confirmation UI (requires hosted project)
 - [x] Customer payment recording and owner/admin payment ledger reversal workflow
