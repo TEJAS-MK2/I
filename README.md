@@ -40,6 +40,8 @@ Make everyday business operations easier for people who are busy serving custome
 - [x] Responsive Deliveries and Communications workspace pages wired to the new endpoints (live operations require hosted backend configuration)
 - [x] Daily Reports workspace backed by the India-time security-invoker summary view
 - [x] Owner/admin stock adjustment workflow with immutable movements, idempotency and negative-stock protection
+- [x] Production infrastructure runbook covering dedicated Supabase provisioning, secure function rollout, Vercel environment setup, smoke tests and rollback
+- [x] Edge Functions support the current Supabase publishable-key dictionary with legacy-key compatibility
 - [x] Channel consent and opt-in-gated idempotent notification queue RPCs; JWT-verified Edge Function source (queue only, no provider delivery)
 - [ ] Phase 8 production hardening
 
@@ -60,6 +62,7 @@ Speech recognition will use a provider adapter so language coverage, latency, pr
 ## Architecture and planning
 
 - [Development blueprint](docs/BLUEPRINT.md)
+- [Production infrastructure runbook](docs/PRODUCTION_RUNBOOK.md)
 - [PWA and offline behavior](docs/PWA.md)
 - [System architecture](docs/ARCHITECTURE.md)
 - [Extended business modules](docs/EXTENDED_MODULES.md)
