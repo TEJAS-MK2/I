@@ -224,7 +224,77 @@ function Billing(){
   {!customers.length&&!loading&&<p className="detail-footnote">Add a customer before creating a credit sale. The customer directory is available in the Customers workspace.</p>}
  </>;
 }
-function Payments(){return <><Header eyebrow="CASH FLOW" title="Payments" description="Track how customers settle outstanding balances." icon={CreditCard}/><Notice/><section className="workspace-panel empty-workspace"><CreditCard size={28}/><h2>Payment receipts are next</h2><p>Payment recording and reconciliation will follow the ledger receipt workflow.</p></section></>;}
+function Payments(){
+ const {business,configured}=useBusiness();
+ const [customers,setCustomers]=useState<{id:string;name:string;balance:number}[]>([]);
+ const [records,setRecords]=useState<{id:string;customer:string;amount:number;method:string;date:string;reversed:boolean}[]>([]);
+ const [customerId,setCustomerId]=useState(""),[amount,setAmount]=useState(""),[method,setMethod]=useState("cash"),[reviewed,setReviewed]=useState(false);
+ const [busy,setBusy]=useState(false),[loading,setLoading]=useState(configured),[error,setError]=useState(""),[success,setSuccess]=useState("");
+ const [key,setKey]=useState(()=>crypto.randomUUID()),[confirmingId,setConfirmingId]=useState("");
+ async function load(){
+  if(!supabase||!business)return;
+  const [cs,ls,ts]=await Promise.all([
+   supabase.from("customers").select("id,display_name").eq("business_id",business.id).order("display_name"),
+   supabase.from("ledger_entries").select("id,customer_id,transaction_id,entry_type,amount_paise,created_at").eq("business_id",business.id).order("created_at",{ascending:false}).limit(200),
+   supabase.from("business_transactions").select("id,transaction_type,payment_method,reversal_of").eq("business_id",business.id)
+  ]);
+  if(cs.error||ls.error||ts.error){setError("Payment history could not be loaded.");return;}
+  const names=new Map((cs.data??[]).map(x=>[x.id,x.display_name]));
+  const balances=new Map<string,number>();
+  for(const row of ls.data??[])balances.set(row.customer_id,(balances.get(row.customer_id)??0)+Number(row.amount_paise));
+  setCustomers((cs.data??[]).map(x=>({id:x.id,name:x.display_name,balance:balances.get(x.id)??0})));
+  const reversed=new Set((ts.data??[]).filter(x=>x.transaction_type==="reversal"&&x.reversal_of).map(x=>x.reversal_of));
+  const methods=new Map((ts.data??[]).filter(x=>x.transaction_type==="payment").map(x=>[x.id,x.payment_method??"other"]));
+  setRecords((ls.data??[]).filter(x=>x.entry_type==="payment").map(x=>({id:x.transaction_id,customer:names.get(x.customer_id)??"Customer",amount:Math.abs(Number(x.amount_paise)),method:methods.get(x.transaction_id)??"other",date:dateLabel(x.created_at),reversed:reversed.has(x.transaction_id)})));
+ }
+ useEffect(()=>{if(configured){setLoading(true);void load().finally(()=>setLoading(false));}},[business?.id,configured]);
+ const selected=customers.find(x=>x.id===customerId);
+ function change(){setReviewed(false);setSuccess("");setKey(crypto.randomUUID());}
+ async function submit(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();if(!supabase||!business||!selected||!reviewed)return;
+  const paise=rupeesToPaise(amount);
+  if(paise===null||paise<=0||paise>selected.balance){setError("Enter a valid payment amount no greater than the outstanding balance.");return;}
+  setBusy(true);setError("");setSuccess("");
+  const {error:e}=await supabase.functions.invoke("record-customer-payment",{body:{business_id:business.id,customer_id:customerId,amount_paise:paise,currency:"INR",idempotency_key:key,payment_method:method,confirmed:true}});
+  if(e){setError("Payment was not accepted. Review the current balance before retrying; the same request key is retained for a safe retry.");setBusy(false);return;}
+  setSuccess("Payment recorded and customer balance updated.");
+  setAmount("");setReviewed(false);setKey(crypto.randomUUID());await load();setBusy(false);
+ }
+ async function reversePayment(transactionId:string){
+  if(!supabase||!business)return;
+  setBusy(true);setError("");setSuccess("");
+  const {error:e}=await supabase.functions.invoke("reverse-customer-payment",{body:{business_id:business.id,original_transaction_id:transactionId,idempotency_key:crypto.randomUUID(),confirmed:true}});
+  if(e){setError("Payment reversal was rejected. Check the payment status and permissions.");setBusy(false);return;}
+  setSuccess("Payment reversed. The original receipt remains in the ledger.");
+  setConfirmingId("");await load();setBusy(false);
+ }
+ if(!configured)return <><Header eyebrow="CASH FLOW" title="Payments" description="Track how customers settle outstanding balances." icon={CreditCard}/><Notice/><section className="workspace-panel empty-workspace"><CreditCard size={28}/><h2>Payment preview</h2><p>Connect the dedicated backend environment to record receipts and reconcile customer balances.</p></section></>;
+ return <>
+  <Header eyebrow="CASH FLOW" title="Payments" description="Record customer receipts and keep their khata balances accurate." icon={CreditCard}/>
+  <div className="demo-notice"><span className="live-dot"/> Live business data · Payment entries are append-only</div>
+  <div className="workspace-two-column payment-layout">
+   <section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Record a payment</h2><p>Accept a cash, UPI or bank receipt against an outstanding balance.</p></div></div>
+    {loading?<div className="empty-inline">Loading customer balances…</div>:<form className="payment-form" onSubmit={submit}>
+     <label className="billing-field">Customer<select required value={customerId} onChange={e=>{setCustomerId(e.target.value);change();}}><option value="">Choose a customer…</option>{customers.filter(x=>x.balance>0).map(x=><option key={x.id} value={x.id}>{x.name} · {money(x.balance)} due</option>)}</select></label>
+     <div className="review-total"><small>Current outstanding</small><strong>{selected?money(selected.balance):"—"}</strong></div>
+     <label className="billing-field">Amount received (₹)<input required inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);change();}} placeholder="0.00"/></label>
+     <label className="billing-field">Payment method<select value={method} onChange={e=>{setMethod(e.target.value);change();}}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank">Bank transfer</option><option value="other">Other</option></select></label>
+     <label className="confirm-review"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/><span>I have verified the customer, amount and payment method. Record this receipt.</span></label>
+     {error&&<p className="auth-error" role="alert">{error}</p>}
+     <button className="auth-submit" disabled={busy||!selected||!amount||!reviewed}>{busy?"Saving securely…":"Confirm payment received"}</button>
+    </form>}
+    {success&&<p className="auth-success" role="status">{success}</p>}
+    {!customers.some(x=>x.balance>0)&&!loading&&<div className="empty-inline">No customer balances are currently outstanding.</div>}
+   </section>
+   <section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Recent receipts</h2><p>Payment reversals preserve the original receipt.</p></div><span className="count-pill">{records.length} receipts</span></div>
+    {records.slice(0,12).map(row=><div className="payment-record" key={row.id}><div className="transaction-icon payment"><ArrowDownLeft size={17}/></div><div className="transaction-info"><strong>{row.customer}</strong><small>{row.method.toUpperCase()} · {row.date}</small></div><div className="payment-record-amount"><strong>{money(row.amount)}</strong>{row.reversed?<small className="reversed-label">Reversed</small>:business?.role==="owner"||business?.role==="admin"?<button className="text-action" onClick={()=>setConfirmingId(confirmingId===row.id?"":row.id)}>{confirmingId===row.id?"Cancel":"Reverse"}</button>:null}</div>
+     {confirmingId===row.id&&!row.reversed&&<div className="payment-reversal-confirm"><span>This adds the payment amount back to the customer's outstanding balance.</span><button disabled={busy} onClick={()=>void reversePayment(row.id)}>Confirm reversal</button></div>}
+    </div>)}
+    {!records.length&&!loading&&<div className="empty-inline">No payments have been recorded yet.</div>}
+   </section>
+  </div>
+ </>;
+}
 export default function WorkspacePage({active}:Props){
  if(active==="Customers")return <Customers/>;
  if(active==="Khata ledger")return <Ledger/>;
