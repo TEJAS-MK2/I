@@ -39,6 +39,7 @@ Make everyday business operations easier for people who are busy serving custome
 - [x] Delivery create/assign/status RPCs with idempotency, role checks and cash-collection caps; JWT-verified Edge Function source (not deployed)
 - [x] Responsive Deliveries and Communications workspace pages wired to the new endpoints (live operations require hosted backend configuration)
 - [x] Daily Reports workspace backed by the India-time security-invoker summary view
+- [x] Owner/admin stock adjustment workflow with immutable movements, idempotency and negative-stock protection
 - [x] Channel consent and opt-in-gated idempotent notification queue RPCs; JWT-verified Edge Function source (queue only, no provider delivery)
 - [ ] Phase 8 production hardening
 
