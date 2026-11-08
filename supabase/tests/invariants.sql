@@ -21,6 +21,21 @@ begin
   if exists (select 1 from public.customers where id='123e4567-e89b-42d3-a456-426614174201') then raise exception 'cross-tenant customer leak'; end if;
 end $$;
 
+select public.create_customer(
+  '123e4567-e89b-42d3-a456-426614174100','New Customer','+919876543210'
+)->>'customer_id' as customer_id \gset new_customer_
+select public.create_product(
+  '123e4567-e89b-42d3-a456-426614174100','Tea','kg',12000,4
+)->>'product_id' as product_id \gset new_product_
+select set_config('test.created_product', :'new_product_product_id', false);
+
+do $
+begin
+  if not exists (select 1 from public.customers where display_name='New Customer' and phone_e164='+919876543210') then raise exception 'customer creation failed'; end if;
+  if (select stock_on_hand from public.products where id=current_setting('test.created_product')::uuid) <> 4 then raise exception 'opening stock not created'; end if;
+  if not exists (select 1 from public.inventory_movements where product_id=current_setting('test.created_product')::uuid and reason='opening_balance' and quantity_delta=4 and actor_id='123e4567-e89b-42d3-a456-426614174001') then raise exception 'opening stock audit movement missing'; end if;
+end $;
+
 select public.record_credit_sale(
   '123e4567-e89b-42d3-a456-426614174100',
   '123e4567-e89b-42d3-a456-426614174101',
@@ -130,3 +145,19 @@ begin
 end $$;
 reset role;
 \echo 'PASS tenant isolation, atomic stock/ledger, idempotency, reversals and append-only ledger'
+
+-- A new account can create its first business and becomes its owner atomically.
+reset role;
+select set_config('request.jwt.claim.sub','123e4567-e89b-42d3-a456-426614174003',false);
+set role authenticated;
+select public.create_business('Newly Onboarded Shop')->>'business_id' as business_id \gset onboarded_
+select set_config('test.onboarded_business', :'onboarded_business_id', false);
+do $$
+begin
+  if not exists (
+    select 1 from public.businesses b join public.business_memberships m on m.business_id=b.id
+    where b.id=current_setting('test.onboarded_business')::uuid
+      and m.user_id='123e4567-e89b-42d3-a456-426614174003' and m.role='owner' and m.status='active'
+  ) then raise exception 'business onboarding did not create owner membership'; end if;
+end $$;
+reset role;
