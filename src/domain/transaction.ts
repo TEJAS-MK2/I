@@ -23,13 +23,18 @@ export type DomainIssue = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const POSITIVE_DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/;
 
-/** Convert rupees to paise without floating-point arithmetic. */
+function decimalToMilli(value: string): bigint {
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, "0"));
+}
+
+/** Convert rupees to integer paise without floating-point arithmetic. */
 export function rupeesToPaise(value: string): number | null {
   const normalized = value.trim();
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(normalized)) return null;
   const [rupees, fraction = ""] = normalized.split(".");
-  const paise = Number(rupees) * 100 + Number(fraction.padEnd(2, "0"));
-  return Number.isSafeInteger(paise) ? paise : null;
+  const paise = BigInt(rupees) * 100n + BigInt(fraction.padEnd(2, "0"));
+  return paise <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(paise) : null;
 }
 
 export function validateCreditSale(command: CreditSaleCommand): DomainIssue[] {
@@ -42,22 +47,23 @@ export function validateCreditSale(command: CreditSaleCommand): DomainIssue[] {
   if (!/^[A-Za-z0-9._:-]{16,128}$/.test(command.idempotencyKey)) issues.push({ code: "invalid_idempotency_key", field: "idempotencyKey", message: "Use a stable idempotency key between 16 and 128 safe characters." });
   if (!Array.isArray(command.items) || command.items.length === 0 || command.items.length > 50) issues.push({ code: "missing_items", field: "items", message: "A credit sale must contain between 1 and 50 confirmed items." });
 
-  let totalPaise = 0;
+  let totalPaise = 0n;
   command.items.forEach((item, index) => {
     if (!UUID.test(item.productId)) issues.push({ code: "invalid_identifier", field: `items.${index}.productId`, message: "A valid product identifier is required." });
-    if (!POSITIVE_DECIMAL.test(item.quantity) || Number(item.quantity) <= 0) {
-      issues.push({ code: "invalid_quantity", field: `items.${index}.quantity`, message: "Quantity must be greater than zero with at most three decimal places." });
-    }
-    if (!Number.isSafeInteger(item.unitPricePaise) || item.unitPricePaise <= 0) {
-      issues.push({ code: "invalid_unit_price", field: `items.${index}.unitPricePaise`, message: "Unit price must be a positive integer number of paise." });
-    }
-    if (POSITIVE_DECIMAL.test(item.quantity) && Number(item.quantity) > 0 && Number.isSafeInteger(item.unitPricePaise) && item.unitPricePaise > 0) {
-      const linePaise = Number(item.quantity) * item.unitPricePaise;
-      if (!Number.isSafeInteger(linePaise)) issues.push({ code: "invalid_amount", field: `items.${index}`, message: "Line total exceeds safe integer precision." });
-      else totalPaise += linePaise;
+    const validQuantity = POSITIVE_DECIMAL.test(item.quantity) && Number(item.quantity) > 0;
+    if (!validQuantity) issues.push({ code: "invalid_quantity", field: `items.${index}.quantity`, message: "Quantity must be greater than zero with at most three decimal places." });
+    const validPrice = Number.isSafeInteger(item.unitPricePaise) && item.unitPricePaise > 0;
+    if (!validPrice) issues.push({ code: "invalid_unit_price", field: `items.${index}.unitPricePaise`, message: "Unit price must be a positive integer number of paise." });
+    if (validQuantity && validPrice) {
+      const milliPaise = decimalToMilli(item.quantity) * BigInt(item.unitPricePaise);
+      if (milliPaise % 1000n !== 0n) {
+        issues.push({ code: "invalid_amount", field: `items.${index}`, message: "Each item line must resolve to a whole number of paise." });
+      } else {
+        totalPaise += milliPaise / 1000n;
+      }
     }
   });
-  if (issues.length === 0 && totalPaise !== command.amountPaise) {
+  if (issues.length === 0 && totalPaise !== BigInt(command.amountPaise)) {
     issues.push({ code: "amount_mismatch", field: "amountPaise", message: "The confirmed amount must equal the sum of all confirmed item lines." });
   }
   return issues;
