@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getPublishableApiKey } from "../_shared/keys.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "http://localhost:5173",
@@ -20,7 +21,7 @@ Deno.serve(async (request: Request) => {
   if (!token) return json(401, { error: "authentication_required" });
 
   const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY");
+  const key = getPublishableApiKey();
   if (!url || !key) return json(503, { error: "backend_not_configured" });
   const client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
