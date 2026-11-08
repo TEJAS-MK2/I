@@ -190,6 +190,15 @@ begin
   end if;
 end $payment_balance_test$;
 
+do $business_onboarding_key_mismatch$
+begin
+  begin
+    perform public.create_business('Different Shop','ci-business-onboarding-0001');
+    raise exception 'expected onboarding idempotency mismatch rejection';
+  exception when unique_violation then null;
+  end;
+end $business_onboarding_key_mismatch$;
+
 do $payment_key_mismatch_test$
 begin
   begin
@@ -271,8 +280,16 @@ reset role;
 reset role;
 select set_config('request.jwt.claim.sub','123e4567-e89b-42d3-a456-426614174003',false);
 set role authenticated;
-select public.create_business('Newly Onboarded Shop')->>'business_id' as business_id \gset onboarded_
+select public.create_business('Newly Onboarded Shop','ci-business-onboarding-0001')->>'business_id' as business_id \gset onboarded_
 select set_config('test.onboarded_business', :'onboarded_business_id', false);
+select public.create_business('Newly Onboarded Shop','ci-business-onboarding-0001')->>'business_id' as business_id \gset onboarded_replay_
+select (:'onboarded_business_id' = :'onboarded_replay_business_id') as onboarding_replayed \gset
+\if :onboarding_replayed
+\echo 'PASS business onboarding idempotency replay'
+\else
+\echo 'FAIL business onboarding idempotency replay'
+\quit 1
+\endif
 do $$
 begin
   if not exists (
