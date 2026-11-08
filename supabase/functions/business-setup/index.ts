@@ -45,13 +45,15 @@ Deno.serve(async (request: Request) => {
     rpcArgs = { p_name: body.name, p_idempotency_key: body.idempotency_key };
   } else if (body.action === "create_customer"
     && typeof body.business_id === "string" && typeof body.display_name === "string"
-    && (body.phone_e164 === null || body.phone_e164 === undefined || typeof body.phone_e164 === "string")) {
+    && (body.phone_e164 === null || body.phone_e164 === undefined || typeof body.phone_e164 === "string")
+    && typeof body.idempotency_key === "string") {
     rpcName = "create_customer";
-    rpcArgs = { p_business_id: body.business_id, p_display_name: body.display_name, p_phone_e164: body.phone_e164 ?? null };
+    rpcArgs = { p_business_id: body.business_id, p_display_name: body.display_name, p_phone_e164: body.phone_e164 ?? null, p_idempotency_key: body.idempotency_key };
   } else if (body.action === "create_product"
     && typeof body.business_id === "string" && typeof body.name === "string"
     && typeof body.unit_label === "string" && typeof body.unit_price_paise === "number"
-    && Number.isSafeInteger(body.unit_price_paise) && typeof body.opening_stock === "number") {
+    && Number.isSafeInteger(body.unit_price_paise) && typeof body.opening_stock === "number"
+    && typeof body.idempotency_key === "string") {
     rpcName = "create_product";
     rpcArgs = {
       p_business_id: body.business_id,
@@ -59,6 +61,7 @@ Deno.serve(async (request: Request) => {
       p_unit_label: body.unit_label,
       p_unit_price_paise: body.unit_price_paise,
       p_opening_stock: body.opening_stock,
+      p_idempotency_key: body.idempotency_key,
     };
   } else {
     return json(400, { error: "invalid_request_shape" });
