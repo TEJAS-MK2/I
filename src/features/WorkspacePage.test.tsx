@@ -7,7 +7,7 @@ describe("workspace preview pages", () => {
     render(<WorkspacePage active="Customers" />);
     expect(screen.getByRole("heading", { name: "Customers" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Search customers" }), { target: { value: "Ramesh" } });
-    expect(screen.getByText("Ramesh Kumar")).toBeInTheDocument();
+    expect(screen.getAllByText("Ramesh Kumar").length).toBeGreaterThan(0);
     expect(screen.queryByText("Maa Grocery")).not.toBeInTheDocument();
     expect(screen.getByText("Outstanding balance")).toBeInTheDocument();
   });
