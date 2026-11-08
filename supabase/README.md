@@ -31,8 +31,10 @@ The backend source in this directory is a reviewed implementation candidate. It 
 `functions/reverse-credit-sale/index.ts` exposes the owner/admin-only sale reversal RPC.
 `functions/record-customer-payment/index.ts` records confirmed customer receipts.
 `functions/reverse-customer-payment/index.ts` exposes owner/admin-only payment ledger reversal.
+`functions/delivery-operations/index.ts` exposes confirmed delivery creation, owner/admin assignment and guarded delivery-event transitions.
+`functions/customer-communication/index.ts` records channel consent and queues notifications only after explicit opt-in.
 
-All three handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
+All handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
 
 Required environment:
 - `SUPABASE_URL`
@@ -54,6 +56,19 @@ POST `/functions/v1/record-customer-payment`
 POST `/functions/v1/reverse-customer-payment`
 
 - `{"business_id":"UUID","original_transaction_id":"UUID","idempotency_key":"...","confirmed":true}`
+
+POST `/functions/v1/delivery-operations`
+
+- Create: `{"action":"create","business_id":"UUID","customer_id":"UUID-or-null","reference_code":"DLV-001","recipient_name":"Ramesh","recipient_phone":null,"delivery_address":"Market Road","delivery_fee_paise":10000,"cash_to_collect_paise":50000,"idempotency_key":"delivery-request-unique-001","confirmed":true}`
+- Assign: `{"action":"assign","business_id":"UUID","delivery_job_id":"UUID","assigned_user_id":"UUID","confirmed":true}`
+- Event: `{"action":"event","business_id":"UUID","delivery_job_id":"UUID","event_type":"picked_up","note":"Parcel collected","confirmed":true}`
+
+POST `/functions/v1/customer-communication`
+
+- Record consent: `{"action":"set_consent","business_id":"UUID","customer_id":"UUID","channel":"whatsapp","consent_status":"opted_in","consent_source":"in_person_recorded","confirmed":true}`
+- Queue (not send): `{"action":"queue","business_id":"UUID","customer_id":"UUID","channel":"whatsapp","purpose":"delivery_update","template_key":"delivery-status-v1","payload":{"message":"Your delivery is on the way"},"idempotency_key":"notification-request-unique-001","confirmed":true}`
+
+The communication endpoint only creates an outbox job; it does not contact a messaging provider. The database rejects queue requests without channel-specific opt-in.
 
 POST `/functions/v1/record-credit-sale`
 
@@ -82,7 +97,7 @@ The caller must review the transcript, customer, currency, quantities and total,
 - Business onboarding and customer/product creation RPCs are implemented and covered by isolated PostgreSQL CI; invitation and staff-membership lifecycle are still missing.
 - Reversal RPC and Edge Function source are implemented; the reversal UI and customer-facing balance history are still required.
 - No dedicated Boli-Khata Supabase project is provisioned or configured.
-- No secrets, authentication provider settings, email/SMS delivery, backups, monitoring, rate limits, or production deployment have been configured.
+- No dedicated provider dispatch worker, messaging provider credentials, email/SMS/WhatsApp delivery, backups, monitoring, rate limits, or production deployment have been configured.
 - The SQL is currently executed against a disposable PostgreSQL 17 CI service with tenant-isolation, atomic stock/ledger, idempotency, reversal and append-only checks. A dedicated Supabase development project and Supabase-specific advisor review are still required before production deployment.
 
 ## Security release gates
