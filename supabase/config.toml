@@ -14,3 +14,9 @@ verify_jwt = true
 
 [functions.reverse-customer-payment]
 verify_jwt = true
+
+[functions.delivery-operations]
+verify_jwt = true
+
+[functions.customer-communication]
+verify_jwt = true
