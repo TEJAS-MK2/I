@@ -41,8 +41,9 @@ Authentication is not being expanded in this milestone. The existing secure
 membership/RLS foundation is preserved rather than replaced with anonymous
 database access. Provider credentials, scheduled outbox workers, messaging delivery,
 proof-of-delivery upload handlers and automated transcript-retention jobs are
-not configured by this schema alone. The included delivery and consent/notification queue RPCs are exposed through
-JWT-verified Edge Function endpoints. They are not yet connected to the frontend.
+not configured by this schema alone. Delivery, inventory, voice-proposal and
+communication RPCs are exposed through JWT-verified Edge Function endpoints;
+the corresponding workspaces are connected to those endpoints or reporting views.
 
 ## API endpoints
 
@@ -64,12 +65,11 @@ provider integration must re-check current consent immediately before delivery.
    RLS isolation, append-only triggers, notification consent enforcement and
    India-time daily aggregation. The repository CI applies this migration and
    runs the extended SQL invariants.
-3. Expose the database RPCs through narrowly scoped Edge Function endpoints;
-   do not expose service-role keys.
-4. Keep testing delivery state transitions, terminal-state rewrites, cash
-   collection caps and assignment authorization.
-5. Test notification idempotency, opt-out suppression, retry limits and provider
-   webhook signature validation before enabling a provider.
+3. Keep Edge Function JWT verification enabled and never expose service-role keys.
+4. Continue testing delivery state transitions, terminal-state rewrites, cash
+   collection caps and assignment authorization as the workflow expands.
+5. Test notification retry limits and provider webhook signature validation
+   before enabling a messaging provider.
 6. Test transcript expiry and private object access.
 7. Deploy only after the dedicated hosted project and secret configuration exist.
 
