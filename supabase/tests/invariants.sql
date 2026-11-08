@@ -409,6 +409,52 @@ begin
   end;
 end $notification_optout_test$;
 
+
+-- Voice proposals are stored for review, not committed as transactions.
+select public.create_voice_proposal(
+  '123e4567-e89b-42d3-a456-426614174100',
+  'hi-IN','text','Ramesh 150 rupees udhar, 2 kg sugar',
+  'credit_sale',
+  '{"customer_name":"Ramesh","amount_paise":15000,"currency":"INR","items":[{"name":"sugar","quantity":"2","unit":"kg"}]}'::jsonb,
+  null,'{}'::text[],'ci-voice-proposal-0001',true
+)->>'proposal_id' as proposal_id \gset voice_
+select public.create_voice_proposal(
+  '123e4567-e89b-42d3-a456-426614174100',
+  'hi-IN','text','Ramesh 150 rupees udhar, 2 kg sugar',
+  'credit_sale',
+  '{"customer_name":"Ramesh","amount_paise":15000,"currency":"INR","items":[{"name":"sugar","quantity":"2","unit":"kg"}]}'::jsonb,
+  null,'{}'::text[],'ci-voice-proposal-0001',true
+)->>'proposal_id' as proposal_id \gset voice_replay_
+select (:'voice_proposal_id' = :'voice_replay_proposal_id') as voice_replayed \gset
+\if :voice_replayed
+\echo 'PASS voice proposal idempotency replay'
+\else
+\echo 'FAIL voice proposal idempotency replay'
+\quit 1
+\endif
+select set_config('test.voice_proposal_id', :'voice_proposal_id', false);
+do $voice_proposal_safety_test$
+begin
+  if not exists (
+    select 1 from public.voice_intent_proposals p
+    join public.voice_sessions s on s.id=p.session_id and s.business_id=p.business_id
+    where p.id=current_setting('test.voice_proposal_id')::uuid
+      and p.status='confirmed' and s.status='reviewed'
+      and p.committed_transaction_id is null
+  ) then raise exception 'voice proposal must remain reviewed and uncommitted'; end if;
+  begin
+    perform public.create_voice_proposal(
+      '123e4567-e89b-42d3-a456-426614174100',
+      'hi-IN','text','Different transcript',
+      'credit_sale',
+      '{"customer_name":"Ramesh","amount_paise":16000,"currency":"INR","items":[]}'::jsonb,
+      null,'{}'::text[],'ci-voice-proposal-0001',true
+    );
+    raise exception 'expected voice proposal idempotency mismatch rejection';
+  exception when unique_violation then null;
+  end;
+end $voice_proposal_safety_test$;
+
 do $reporting_test$
 begin
   if not exists (
