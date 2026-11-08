@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import App from "./App";
 
@@ -23,7 +23,7 @@ describe("Boli-Khata foundation dashboard", () => {
 
   it("updates the workspace breadcrumb when a section is selected", () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: /customers/i }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: /main navigation/i })).getByRole("button", { name: /customers/i }));
     expect(screen.getAllByText("Customers").length).toBeGreaterThan(1);
   });
 });
