@@ -37,6 +37,7 @@ select public.record_credit_sale(
   true
 )->>'transaction_id' as transaction_id \gset replay_
 
+select set_config('test.sale_id', :'sale_sale_id', false);
 select (:'sale_sale_id' = :'replay_transaction_id') as idempotency_replayed \gset
 \if :idempotency_replayed
 \echo 'PASS idempotency replay'
@@ -48,7 +49,7 @@ select (:'sale_sale_id' = :'replay_transaction_id') as idempotency_replayed \gse
 do $$
 begin
   if (select stock_on_hand from public.products where id='123e4567-e89b-42d3-a456-426614174102') <> 3 then raise exception 'stock decrement failed'; end if;
-  if (select amount_paise from public.ledger_entries where transaction_id=:'sale_sale_id'::uuid) <> 30000 then raise exception 'ledger amount failed'; end if;
+  if (select amount_paise from public.ledger_entries where transaction_id=current_setting('test.sale_id')::uuid) <> 30000 then raise exception 'ledger amount failed'; end if;
 end $$;
 
 -- An overdrawn sale must fail and roll back its idempotency claim and all writes.
@@ -80,7 +81,7 @@ do $$
 begin
   if (select stock_on_hand from public.products where id='123e4567-e89b-42d3-a456-426614174102') <> 5 then raise exception 'reversal stock restoration failed'; end if;
   if (select sum(amount_paise) from public.ledger_entries where customer_id='123e4567-e89b-42d3-a456-426614174101') <> 0 then raise exception 'reversal ledger balance failed'; end if;
-  if (select count(*) from public.business_transactions where reversal_of=:'sale_sale_id'::uuid) <> 1 then raise exception 'reversal record missing'; end if;
+  if (select count(*) from public.business_transactions where reversal_of=current_setting('test.sale_id')::uuid) <> 1 then raise exception 'reversal record missing'; end if;
 end $$;
 
 -- Ledger rows cannot be mutated even by an authenticated member.
