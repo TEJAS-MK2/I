@@ -16,25 +16,27 @@ Make everyday business operations easier for people who are busy serving custome
 - [x] Phase 1 foundation branch and project scaffold
 - [ ] Phase 1 review and acceptance
 - [x] Phase 2 voice-provider boundary and review-only proposal prototype
-- [ ] Production speech provider and server-side transaction validation
-- [ ] Phase 3 customer and khata ledger
+- [x] Server-side transaction contract, atomic credit-sale and reversal procedures (schema source + CI-tested)
+- [ ] Dedicated Supabase project, Auth configuration and hosted Edge Function deployment
+- [ ] Production speech provider and frontend confirmation integration
+- [ ] Phase 3 customer onboarding and khata ledger UI
 - [ ] Phase 4 inventory and billing
 - [ ] Phase 5 transaction intelligence
 - [ ] Phase 6 customer communication
 - [ ] Phase 7 local logistics
 - [ ] Phase 8 production hardening
 
-This repository is in early foundation development. No production backend, speech provider, payment integration or WhatsApp integration is configured yet.
+The repository now contains a CI-tested Postgres backend schema and authenticated Edge Function source for credit sales and reversals. These are not yet applied or deployed to a dedicated hosted Boli-Khata project. No production speech provider, payment integration or WhatsApp integration is configured yet.
 
 ## Technology direction
 
 - Frontend: React, TypeScript, Vite
-- Backend: Node.js, TypeScript, Fastify
-- API: REST + WebSockets where useful
-- Data: PostgreSQL, Drizzle ORM
-- Validation: Zod
-- Testing: Vitest, React Testing Library, Playwright
-- Delivery: PWA, GitHub Actions, Vercel frontend and separately managed API/database
+- Backend: Supabase Edge Functions (Deno + TypeScript)
+- API: authenticated REST/RPC; realtime only where justified
+- Data: Supabase PostgreSQL with row-level security
+- Validation: deterministic TypeScript domain rules + database constraints
+- Testing: Vitest, React Testing Library, Deno typecheck and isolated PostgreSQL integration tests
+- Delivery: PWA, GitHub Actions and Vercel frontend; dedicated Supabase project for Auth/Postgres/Functions
 
 Speech recognition will use a provider adapter so language coverage, latency, privacy and cost can be compared before a provider is selected.
 
@@ -63,7 +65,7 @@ npm run build
 
 ## Project status
 
-The Phase 1 branch establishes the product foundation and initial frontend shell. Features are delivered incrementally; badges and deployment links will be added only after their workflows and deployments are verified.
+The feature branch now includes the voice proposal preview, exact-paise domain validation, tenant-scoped Postgres schema, atomic credit-sale and reversal RPCs, authenticated Edge Function handlers, and backend CI checks. Hosted deployment remains gated on a dedicated Boli-Khata Supabase project and security review.
 
 ## License
 
