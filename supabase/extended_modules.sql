@@ -481,13 +481,13 @@ revoke all on function private.assign_delivery_job(uuid,uuid,uuid,boolean) from 
 revoke all on function private.record_delivery_event(uuid,uuid,text,text,bigint,boolean) from public, anon;
 grant execute on function private.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) to authenticated;
 grant execute on function private.assign_delivery_job(uuid,uuid,uuid,boolean) to authenticated;
-grant execute on function private.record_delivery_event(uuid,uuid,text,text,bigint) to authenticated;
+grant execute on function private.record_delivery_event(uuid,uuid,text,text,bigint,boolean) to authenticated;
 revoke all on function public.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) from public, anon;
 revoke all on function public.assign_delivery_job(uuid,uuid,uuid,boolean) from public, anon;
 revoke all on function public.record_delivery_event(uuid,uuid,text,text,bigint,boolean) from public, anon;
 grant execute on function public.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) to authenticated;
 grant execute on function public.assign_delivery_job(uuid,uuid,uuid,boolean) to authenticated;
-grant execute on function public.record_delivery_event(uuid,uuid,text,text,bigint) to authenticated;
+grant execute on function public.record_delivery_event(uuid,uuid,text,text,bigint,boolean) to authenticated;
 
 
 -- Consent is recorded explicitly per customer and channel. Unknown consent is
