@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import App from "../App";
+import App from "./App";
 
 describe("Boli-Khata foundation dashboard", () => {
   it("renders the business overview and sample-data notice", () => {
