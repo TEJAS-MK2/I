@@ -8,3 +8,9 @@ verify_jwt = true
 
 [functions.business-setup]
 verify_jwt = true
+
+[functions.record-customer-payment]
+verify_jwt = true
+
+[functions.reverse-customer-payment]
+verify_jwt = true
