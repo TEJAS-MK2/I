@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, BookOpen, Boxes, CreditCard, FileText, Search, ShoppingBag, Users } from "lucide-react";
+import { ArrowDownLeft, BookOpen, Boxes, CreditCard, FileText, Search, ShoppingBag, Users } from "lucide-react";
 
 type WorkspacePageProps = { active: string };
 
