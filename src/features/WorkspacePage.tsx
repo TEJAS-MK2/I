@@ -7,7 +7,7 @@ import { rupeesToPaise, validateCreditSale } from "../domain/transaction";
 type Props={active:string};
 type Customer={id:string;name:string;phone:string;balance:number;last:string};
 type Product={id:string;name:string;unit:string;stock:number;price:number};
-type Entry={id:string;customer:string;detail:string;date:string;amount:number;reversal:boolean};
+type Entry={id:string;customer:string;detail:string;date:string;amount:number;kind:'credit'|'payment'|'reversal'|'payment_reversal'};
 const sampleCustomers:Customer[]=[
 {id:"s1",name:"Ramesh Kumar",phone:"+91 98765 43210",balance:245000,last:"Today, 10:18 AM"},
 {id:"s2",name:"Ananya Stores",phone:"+91 98300 11223",balance:0,last:"Today, 11:42 AM"},
@@ -17,9 +17,9 @@ const sampleProducts:Product[]=[
 {id:"p1",name:"Premium rice",unit:"kg",stock:42,price:6800},{id:"p2",name:"Sugar",unit:"kg",stock:8,price:4500},
 {id:"p3",name:"Mustard oil",unit:"litre",stock:3,price:15500},{id:"p4",name:"Tea leaves",unit:"kg",stock:16,price:42000}];
 const sampleEntries:Entry[]=[
-{id:"e1",customer:"Ramesh Kumar",detail:"Credit sale · 2 kg sugar",date:"Today, 10:18 AM",amount:45000,reversal:false},
-{id:"e2",customer:"Maa Grocery",detail:"Reversal",date:"Today, 9:56 AM",amount:-80000,reversal:true},
-{id:"e3",customer:"Suman Enterprise",detail:"Credit sale · Rice & oil",date:"Yesterday",amount:520000,reversal:false}];
+{id:"e1",customer:"Ramesh Kumar",detail:"Credit sale · 2 kg sugar",date:"Today, 10:18 AM",amount:45000,kind:"credit"},
+{id:"e2",customer:"Maa Grocery",detail:"Reversal",date:"Today, 9:56 AM",amount:-80000,kind:"reversal"},
+{id:"e3",customer:"Suman Enterprise",detail:"Credit sale · Rice & oil",date:"Yesterday",amount:520000,kind:"credit"}];
 const money=(paise:number)=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2}).format(paise/100);
 const dateLabel=(value:string)=>new Date(value).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"});
 function Header({eyebrow,title,description,icon:Icon}:{eyebrow:string;title:string;description:string;icon:typeof Users}){return <div className="workspace-page-header"><div className="workspace-page-icon"><Icon size={20}/></div><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div></div>;}
@@ -82,15 +82,15 @@ function Ledger(){
    ]);
    if(!active)return;if(ls.error||cs.error){setError("Ledger history could not be loaded.");return;}
    const names=new Map((cs.data??[]).map(x=>[x.id,x.display_name]));
-   setRows((ls.data??[]).map(x=>({id:x.id,customer:names.get(x.customer_id)??"Customer",detail:x.entry_type==="credit_sale"?"Credit sale":"Reversal",date:dateLabel(x.created_at),amount:Number(x.amount_paise),reversal:x.entry_type==="reversal"})));
+   setRows((ls.data??[]).map(x=>({id:x.id,customer:names.get(x.customer_id)??"Customer",detail:x.entry_type==="credit_sale"?"Credit sale":x.entry_type==="payment"?"Customer payment":x.entry_type==="payment_reversal"?"Payment reversal":"Sale reversal",date:dateLabel(x.created_at),amount:Number(x.amount_paise),kind:x.entry_type==="credit_sale"?"credit":x.entry_type==="payment"?"payment":x.entry_type==="payment_reversal"?"payment_reversal":"reversal"})));
   })();return()=>{active=false;};
  },[business?.id,configured]);
  const balance=rows.reduce((n,x)=>n+x.amount,0);
  return <>
   <Header eyebrow="CUSTOMER ACCOUNTS" title="Khata ledger" description="A clear, chronological view of credit and reversal activity." icon={BookOpen}/>{!configured&&<Notice/>}
-  <div className="workspace-metrics"><Metric label="Outstanding balance" value={money(balance)} note={configured?"Live ledger balance":"Sample ledger total"}/><Metric label="Credit entries" value={String(rows.filter(x=>!x.reversal).length)} note="Credit sales"/><Metric label="Reversals" value={String(rows.filter(x=>x.reversal).length)} note="Compensating entries"/></div>
+  <div className="workspace-metrics"><Metric label="Outstanding balance" value={money(balance)} note={configured?"Live ledger balance":"Sample ledger total"}/><Metric label="Credit entries" value={String(rows.filter(x=>x.kind==="credit").length)} note="Credit sales"/><Metric label="Reversals" value={String(rows.filter(x=>x.kind==="reversal"||x.kind==="payment_reversal").length)} note="Compensating entries"/></div>
   <section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Recent ledger activity</h2><p>Original records are never edited or deleted.</p></div><span className="count-pill">{rows.length} entries</span></div>{error&&<p className="auth-error" role="alert">{error}</p>}
-   <div className="ledger-table"><div className="ledger-row ledger-head"><span>Customer / description</span><span>Date</span><span>Entry</span><span>Amount</span></div>{rows.map(x=><div className="ledger-row" key={x.id}><span className="ledger-person"><strong>{x.customer}</strong><small>{x.detail}</small></span><span>{x.date}</span><span><span className={x.reversal?"entry-chip payment-chip":"entry-chip credit-chip"}>{x.reversal?"Reversal":"Credit"}</span></span><strong className={x.reversal?"ledger-payment":"ledger-credit"}>{x.amount<0?"−":"+"}{money(Math.abs(x.amount))}</strong></div>)}</div>
+   <div className="ledger-table"><div className="ledger-row ledger-head"><span>Customer / description</span><span>Date</span><span>Entry</span><span>Amount</span></div>{rows.map(x=><div className="ledger-row" key={x.id}><span className="ledger-person"><strong>{x.customer}</strong><small>{x.detail}</small></span><span>{x.date}</span><span><span className={x.kind==="credit"?"entry-chip credit-chip":"entry-chip payment-chip"}>{x.kind==="credit"?"Credit":x.kind==="payment"?"Payment":x.kind==="payment_reversal"?"Payment reversal":"Sale reversal"}</span></span><strong className={x.kind==="credit"?"ledger-credit":"ledger-payment"}>{x.amount<0?"−":"+"}{money(Math.abs(x.amount))}</strong></div>)}</div>
    {!rows.length&&<div className="empty-inline">No ledger entries yet. Confirmed credit sales will appear here.</div>}<div className="ledger-footer"><span>Ledger history is append-only.</span><span>Corrections use linked reversals.</span></div>
   </section>
  </>;
