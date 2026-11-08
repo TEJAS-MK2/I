@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import VoiceWorkspace from "./voice/VoiceWorkspace";
 import WorkspacePage from "./features/WorkspacePage";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { BusinessProvider, useBusiness } from "./business/BusinessContext";
+import BusinessOnboarding from "./business/BusinessOnboarding";
 import {
   Activity, ArrowUpRight, Bell, BookOpen, Boxes, ChevronDown, CircleHelp,
   Command, CreditCard, LayoutDashboard, Mic, Package, Plus, Search,
@@ -25,6 +27,9 @@ const activity = [
 
 function BusinessApp() {
   const { configured, user, signOut } = useAuth();
+  const { business, loading: businessLoading, error: businessError } = useBusiness();
+  if (configured && businessLoading) return <div className="auth-loading" role="status">Loading your business workspace…</div>;
+  if (configured && !business) return <><BusinessOnboarding/>{businessError && <p className="auth-error">{businessError}</p>}</>;
   const [active, setActive] = useState("Overview");
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
@@ -46,7 +51,7 @@ function BusinessApp() {
           <span className="brand-mark"><Command size={21} /></span>
           <span><strong>boli<span>-</span>khata</strong><small>BUSINESS, SIMPLIFIED</small></span>
         </a>
-        <div className="workspace-switch"><div className="store-avatar">S</div><div className="workspace-copy"><strong>Sharma General Store</strong><small>Owner workspace</small></div><ChevronDown size={16} /></div>
+        <div className="workspace-switch"><div className="store-avatar">S</div><div className="workspace-copy"><strong>{business?.name ?? "Sample General Store"}</strong><small>{business ? business.role+" workspace" : "Preview workspace"}</small></div><ChevronDown size={16} /></div>
         <p className="nav-label">WORKSPACE</p>
         <nav className="main-nav" aria-label="Main navigation">
           {nav.map(({ label, icon: Icon }) => <button key={label} className={active === label ? "nav-item active" : "nav-item"} onClick={() => setActive(label)}><Icon size={18} /><span>{label}</span>{label === "Khata ledger" && <span className="nav-count">8</span>}</button>)}
@@ -85,5 +90,5 @@ function BusinessApp() {
 
 
 export default function App() {
-  return <AuthProvider><BusinessApp /></AuthProvider>;
+  return <AuthProvider><BusinessProvider><BusinessApp /></BusinessProvider></AuthProvider>;
 }
