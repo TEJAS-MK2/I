@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 
 export default function BusinessOnboarding() {
   const [name,setName]=useState("");
+  const [idempotencyKey,setIdempotencyKey]=useState(()=>crypto.randomUUID());
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const { refresh }=useBusiness();
@@ -14,7 +15,7 @@ export default function BusinessOnboarding() {
     if(!supabase)return;
     setBusy(true);setError("");
     const {data,error:invokeError}=await supabase.functions.invoke("business-setup",{
-      body:{action:"create_business",name:name.trim()},
+      body:{action:"create_business",name:name.trim(),idempotency_key:idempotencyKey},
     });
     if(invokeError||!data?.result?.business_id){
       setError("We couldn't create your workspace. Please retry or contact support.");
@@ -22,6 +23,7 @@ export default function BusinessOnboarding() {
       return;
     }
     await refresh();
+    setIdempotencyKey(crypto.randomUUID());
     setBusy(false);
   }
 
