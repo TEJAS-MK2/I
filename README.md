@@ -19,14 +19,16 @@ Make everyday business operations easier for people who are busy serving custome
 - [x] Server-side transaction contract, atomic credit-sale and reversal procedures (schema source + CI-tested)
 - [ ] Dedicated Supabase project, Auth configuration and hosted Edge Function deployment
 - [ ] Production speech provider and frontend confirmation integration
-- [ ] Phase 3 customer onboarding and khata ledger UI
-- [ ] Phase 4 inventory and billing
+- [x] Customer, khata, inventory and billing workspace previews (sample data; read-only)
+- [x] Installable PWA shell with static-only offline fallback
+- [ ] Phase 3 connected customer onboarding and khata ledger UI
+- [ ] Phase 4 connected inventory and billing
 - [ ] Phase 5 transaction intelligence
 - [ ] Phase 6 customer communication
 - [ ] Phase 7 local logistics
 - [ ] Phase 8 production hardening
 
-The repository now contains a CI-tested Postgres backend schema and authenticated Edge Function source for credit sales and reversals. These are not yet applied or deployed to a dedicated hosted Boli-Khata project. No production speech provider, payment integration or WhatsApp integration is configured yet.
+The repository now contains customer/ledger/inventory/billing preview pages and an installable PWA shell. Its service worker caches only same-origin static app assets and never caches auth, database, function, storage or other API responses. Offline mode is shell-only; it does not queue or commit financial changes. The repository also contains a CI-tested Postgres backend schema and authenticated Edge Function source for credit sales and reversals. These are not yet applied or deployed to a dedicated hosted Boli-Khata project. No production speech provider, payment integration or WhatsApp integration is configured yet.
 
 ## Technology direction
 
@@ -43,6 +45,7 @@ Speech recognition will use a provider adapter so language coverage, latency, pr
 ## Architecture and planning
 
 - [Development blueprint](docs/BLUEPRINT.md)
+- [PWA and offline behavior](docs/PWA.md)
 - [System architecture](docs/ARCHITECTURE.md)
 - [Security model](docs/SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md)
