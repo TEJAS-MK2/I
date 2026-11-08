@@ -46,15 +46,17 @@ create table public.business_transactions (
   business_id uuid not null references public.businesses(id) on delete restrict,
   customer_id uuid not null,
   actor_id uuid not null references auth.users(id) on delete restrict,
-  transaction_type text not null check (transaction_type in ('credit_sale','reversal')),
+  transaction_type text not null check (transaction_type in ('credit_sale','payment','reversal')),
   amount_paise bigint not null check (amount_paise > 0),
   currency text not null check (currency = 'INR'),
+  payment_method text check (payment_method in ('cash','upi','bank','other')),
   idempotency_key text not null check (length(idempotency_key) between 16 and 128),
   reversal_of uuid unique references public.business_transactions(id) on delete restrict,
   created_at timestamptz not null default now(),
   foreign key (business_id, customer_id) references public.customers(business_id, id) on delete restrict,
   unique (business_id, actor_id, idempotency_key),
-  check ((transaction_type = 'credit_sale' and reversal_of is null) or (transaction_type = 'reversal' and reversal_of is not null))
+  check ((transaction_type in ('credit_sale','payment') and reversal_of is null) or (transaction_type = 'reversal' and reversal_of is not null)),
+  check ((transaction_type = 'payment' and payment_method is not null) or (transaction_type <> 'payment' and payment_method is null))
 );
 
 create table public.transaction_items (
@@ -73,12 +75,12 @@ create table public.ledger_entries (
   business_id uuid not null references public.businesses(id) on delete restrict,
   customer_id uuid not null,
   transaction_id uuid not null unique references public.business_transactions(id) on delete restrict,
-  entry_type text not null check (entry_type in ('credit_sale','reversal')),
+  entry_type text not null check (entry_type in ('credit_sale','sale_reversal','payment','payment_reversal')),
   amount_paise bigint not null check (amount_paise <> 0),
   currency text not null check (currency = 'INR'),
   created_at timestamptz not null default now(),
   foreign key (business_id, customer_id) references public.customers(business_id, id) on delete restrict,
-  check ((entry_type = 'credit_sale' and amount_paise > 0) or (entry_type = 'reversal' and amount_paise < 0))
+  check ((entry_type in ('credit_sale','payment_reversal') and amount_paise > 0) or (entry_type in ('sale_reversal','payment') and amount_paise < 0))
 );
 
 create table public.inventory_movements (
@@ -343,6 +345,9 @@ begin
   if exists (select 1 from public.business_transactions r where r.reversal_of = v_original.id) then
     raise exception 'sale has already been reversed' using errcode = '23505';
   end if;
+  if coalesce((select sum(le.amount_paise) from public.ledger_entries le where le.business_id=p_business_id and le.customer_id=v_original.customer_id),0) < v_original.amount_paise then
+    raise exception 'sale cannot be reversed while its value has been settled; reverse the payment first' using errcode = '22023';
+  end if;
 
   insert into public.business_transactions(
     business_id, customer_id, actor_id, transaction_type, amount_paise,
@@ -353,7 +358,7 @@ begin
   ) returning id into v_reversal_id;
 
   insert into public.ledger_entries(business_id, customer_id, transaction_id, entry_type, amount_paise, currency)
-  values (p_business_id, v_original.customer_id, v_reversal_id, 'reversal', -v_original.amount_paise, v_original.currency);
+  values (p_business_id, v_original.customer_id, v_reversal_id, 'sale_reversal', -v_original.amount_paise, v_original.currency);
 
   for v_item in
     select i.product_id, i.quantity, i.unit_price_paise, i.line_total_paise
