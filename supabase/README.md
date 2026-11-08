@@ -14,7 +14,9 @@ The backend source in this directory is a reviewed implementation candidate. It 
 - Current product stock is a projection updated only inside the atomic transaction function; movement rows preserve the stock audit trail.
 - `create_business`, `create_customer` and `create_product` provide authenticated onboarding/master-data setup. Opening stock is captured as an append-only inventory movement.
 - `record_credit_sale` performs the sale header, item rows, ledger entry and stock decrements in one Postgres transaction.
-- `reverse_credit_sale` appends a linked reversal, negative ledger entry and compensating stock movements; only owner/admin roles can reverse.
+- `reverse_credit_sale` appends a linked sale reversal, negative ledger entry and compensating stock movements; it refuses to reverse a sale whose value has already been settled.
+- `record_customer_payment` appends a negative payment ledger entry, enforces the outstanding balance ceiling and records the payment method.
+- `reverse_customer_payment` appends a positive compensating entry; it does not claim to refund or reverse an external bank/UPI transfer.
 - Idempotency keys are bound to a canonical request payload; reusing a key with a different payload is rejected.
 - Idempotency claims prevent duplicate commits on retries.
 - Client-facing tables have RLS and read-only grants. Direct client writes are intentionally unavailable.
@@ -25,7 +27,9 @@ The backend source in this directory is a reviewed implementation candidate. It 
 `functions/business-setup/index.ts` handles business onboarding plus customer and product creation through database RPCs.
 `functions/record-credit-sale/index.ts` verifies the bearer session with `auth.getUser`, validates request shape, and forwards the caller JWT to the database RPC.
 
-`functions/reverse-credit-sale/index.ts` exposes the owner/admin-only compensating reversal RPC.
+`functions/reverse-credit-sale/index.ts` exposes the owner/admin-only sale reversal RPC.
+`functions/record-customer-payment/index.ts` records confirmed customer receipts.
+`functions/reverse-customer-payment/index.ts` exposes owner/admin-only payment ledger reversal.
 
 All three handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
 
@@ -41,6 +45,14 @@ POST `/functions/v1/business-setup`
 - `{"action":"create_business","name":"My Store"}`
 - `{"action":"create_customer","business_id":"UUID","display_name":"Ramesh","phone_e164":"+919876543210"}`
 - `{"action":"create_product","business_id":"UUID","name":"Sugar","unit_label":"kg","unit_price_paise":15000,"opening_stock":5}`
+
+POST `/functions/v1/record-customer-payment`
+
+- `{"business_id":"UUID","customer_id":"UUID","amount_paise":50000,"currency":"INR","idempotency_key":"...","payment_method":"cash","confirmed":true}`
+
+POST `/functions/v1/reverse-customer-payment`
+
+- `{"business_id":"UUID","original_transaction_id":"UUID","idempotency_key":"...","confirmed":true}`
 
 POST `/functions/v1/record-credit-sale`
 
