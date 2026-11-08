@@ -32,7 +32,7 @@ export default function BusinessOnboarding() {
     <div className="eyebrow">FIRST-TIME SETUP</div><h1>Set up your shop.</h1>
     <p className="auth-intro">Create your business workspace. Your account will become its owner, and business records will stay isolated from other shops.</p>
     <form className="auth-form" onSubmit={submit}>
-      <label>Business name<input required maxLength={120} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Pijush General Store"/></label>
+      <label>Business name<input required maxLength={120} value={name} onChange={e=>{setName(e.target.value);setIdempotencyKey(crypto.randomUUID());}} placeholder="e.g. Pijush General Store"/></label>
       {error&&<p className="auth-error" role="alert">{error}</p>}
       <button className="auth-submit" disabled={busy||!name.trim()}>{busy?"Creating workspace…":"Create business workspace"} <ArrowRight size={16}/></button>
     </form>
