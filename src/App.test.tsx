@@ -6,7 +6,7 @@ describe("Boli-Khata foundation dashboard", () => {
   it("renders the business overview and sample-data notice", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: /good morning, priya/i })).toBeInTheDocument();
-    expect(screen.getByText(/sample data only/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/sample data only/i).length).toBeGreaterThan(0);
   });
 
   it("provides the main workspace navigation", () => {
@@ -24,6 +24,6 @@ describe("Boli-Khata foundation dashboard", () => {
   it("updates the workspace breadcrumb when a section is selected", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /customers/i }));
-    expect(screen.getByText("Customers")).toBeInTheDocument();
+    expect(screen.getAllByText("Customers").length).toBeGreaterThan(1);
   });
 });
