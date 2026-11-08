@@ -297,6 +297,7 @@ begin
   if exists (select 1 from public.customers where id='123e4567-e89b-42d3-a456-426614174101') then raise exception 'cross-tenant access granted'; end if;
 end $$;
 
+select set_config('request.jwt.claim.sub','123e4567-e89b-42d3-a456-426614174001',false);
 -- Delivery creation, assignment and event transitions are idempotent and tenant-scoped.
 select public.create_delivery_job(
   '123e4567-e89b-42d3-a456-426614174100',
