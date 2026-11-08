@@ -38,22 +38,21 @@ A practical business assistant for kirana stores, street vendors, small retailer
 | UI | Tailwind CSS and accessible primitives |
 | Server state | TanStack Query |
 | Forms | React Hook Form + Zod |
-| API | Node.js, TypeScript, Fastify |
-| Contracts | Zod schemas and OpenAPI |
-| Database | PostgreSQL |
-| ORM | Drizzle |
-| Auth | Managed identity provider or secure backend sessions |
-| Realtime | WebSockets / SSE where justified |
-| Storage | Private S3-compatible object storage |
+| API | Supabase Edge Functions (Deno + TypeScript) |
+| Contracts | Typed domain contracts; OpenAPI where useful |
+| Database | Supabase PostgreSQL with RLS |
+| Auth | Supabase Auth; JWT subject is the actor identity |
+| Realtime | Supabase Realtime / SSE where justified |
+| Storage | Private Supabase Storage buckets or S3-compatible storage |
 | Voice | Pluggable speech-to-text adapter |
 | Tests | Vitest, Testing Library, Playwright |
 | CI/CD | GitHub Actions; Vercel frontend and managed API/database |
 
-Vendor selection for speech, auth, database and storage remains open until coverage, latency, privacy, retention, reliability and cost are compared.
+Supabase is the selected cloud backend direction for the current implementation. Speech-provider selection remains open until language coverage, latency, privacy, retention, reliability and cost are compared.
 
 ## Architecture
 
-React PWA → typed API → modular application services → domain rules → PostgreSQL. Speech and messaging providers sit behind adapters. Start as a modular monolith, not microservices.
+React PWA → authenticated Supabase Edge Functions / Postgres RPC → deterministic domain rules → PostgreSQL. Supabase Auth establishes identity; RLS and membership checks enforce tenant scope. Speech and messaging providers sit behind adapters.
 
 Modules: Identity, Businesses, Customers, Ledger, Catalogue, Inventory, Sales, Voice, Transaction, Audit, Notifications, Logistics and Reporting.
 
@@ -88,7 +87,7 @@ Unresolved customer, currency, amount, unit or operation blocks commit and trigg
 
 - Ledger entries are append-only; corrections use linked reversals/adjustments.
 - Sales, payments and stock changes commit atomically.
-- Store money using database NUMERIC/decimal-safe arithmetic, never floating point.
+- Store money as integer paise for INR transactions and use exact numeric/integer arithmetic; never use floating point for persisted money.
 - Currency is explicit (ISO 4217); do not assume every business uses the same currency.
 - Quantity precision follows unit configuration.
 - Idempotency prevents duplicate voice submissions and network retries.
