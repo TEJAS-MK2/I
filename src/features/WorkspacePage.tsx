@@ -113,7 +113,7 @@ function Inventory(){
  const low=rows.filter(x=>x.stock>0&&x.stock<=8).length,out=rows.filter(x=>x.stock===0).length;
  async function adjustStock(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!supabase||!business||!adjusting||!adjustmentReviewed)return;
-  if(!/^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$/.test(delta)||!Number.isFinite(Number(delta))||Number(delta)===0){setError("Enter a non-zero stock change with up to three decimals.");return;}
+  if(!/^-?(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.test(delta)||!Number.isFinite(Number(delta))||Number(delta)===0){setError("Enter a non-zero stock change with up to three decimals.");return;}
   if(!adjustmentNote.trim()){setError("Add a short reason for this stock adjustment.");return;}
   setBusy(true);setError("");setAdjustmentSuccess("");
   const {error:e}=await supabase.functions.invoke("inventory-operations",{body:{business_id:business.id,product_id:adjusting.id,quantity_delta:Number(delta),note:adjustmentNote.trim(),idempotency_key:adjustmentKey,confirmed:true}});
