@@ -190,6 +190,33 @@ begin
   end if;
 end $payment_balance_test$;
 
+do $payment_key_mismatch_test$
+begin
+  begin
+    perform public.record_customer_payment(
+      '123e4567-e89b-42d3-a456-426614174100',
+      '123e4567-e89b-42d3-a456-426614174101',
+      4000,'INR','ci-customer-payment-0001','cash',true
+    );
+    raise exception 'expected payment idempotency mismatch rejection';
+  exception when unique_violation then null;
+  end;
+end $payment_key_mismatch_test$;
+
+do $settled_sale_reversal_test$
+begin
+  begin
+    perform public.reverse_credit_sale(
+      '123e4567-e89b-42d3-a456-426614174100',
+      current_setting('test.second_sale_id')::uuid,
+      'ci-premature-sale-reversal-0001',
+      true
+    );
+    raise exception 'expected settled sale reversal rejection';
+  exception when sqlstate '22023' then null;
+  end;
+end $settled_sale_reversal_test$;
+
 do $payment_overpay_test$
 begin
   begin
