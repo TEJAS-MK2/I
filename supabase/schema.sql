@@ -497,3 +497,139 @@ revoke all on function private.create_product(uuid,text,text,bigint,numeric) fro
 grant execute on function private.create_product(uuid,text,text,bigint,numeric) to authenticated;
 revoke all on function public.create_product(uuid,text,text,bigint,numeric) from public, anon;
 grant execute on function public.create_product(uuid,text,text,bigint,numeric) to authenticated;
+
+-- Customer payments reduce the khata balance and are committed atomically with their transaction.
+create or replace function private.record_customer_payment(
+  p_business_id uuid,p_customer_id uuid,p_amount_paise bigint,p_currency text,
+  p_idempotency_key text,p_payment_method text,p_confirmed boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_balance bigint;
+  v_tx_id uuid;
+  v_claimed integer;
+  v_fingerprint text;
+  v_existing_fingerprint text;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
+  if p_amount_paise is null or p_amount_paise <= 0 then raise exception 'payment must be positive paise' using errcode = '22023'; end if;
+  if p_currency is distinct from 'INR' then raise exception 'unsupported currency' using errcode = '22023'; end if;
+  if p_payment_method not in ('cash','upi','bank','other') then raise exception 'unsupported payment method' using errcode = '22023'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128}$' then raise exception 'invalid idempotency key' using errcode = '22023'; end if;
+  if not exists (
+    select 1 from public.business_memberships m where m.business_id=p_business_id
+      and m.user_id=v_actor and m.status='active' and m.role in ('owner','admin','cashier')
+  ) then raise exception 'business access denied' using errcode = '42501'; end if;
+  if not exists (select 1 from public.customers c where c.id=p_customer_id and c.business_id=p_business_id) then
+    raise exception 'customer not found in this business' using errcode = '22023';
+  end if;
+
+  v_fingerprint := jsonb_build_object('customer_id',p_customer_id,'amount_paise',p_amount_paise,'currency',p_currency,'payment_method',p_payment_method)::text;
+  insert into public.idempotency_claims(business_id,actor_id,idempotency_key,request_fingerprint)
+  values (p_business_id,v_actor,p_idempotency_key,v_fingerprint) on conflict do nothing;
+  get diagnostics v_claimed = row_count;
+  if v_claimed=0 then
+    select ic.transaction_id,ic.request_fingerprint into v_tx_id,v_existing_fingerprint
+    from public.idempotency_claims ic where ic.business_id=p_business_id and ic.actor_id=v_actor and ic.idempotency_key=p_idempotency_key;
+    if v_existing_fingerprint is distinct from v_fingerprint then raise exception 'idempotency key reused with different request' using errcode = '23505'; end if;
+    if v_tx_id is not null then return jsonb_build_object('transaction_id',v_tx_id,'replayed',true); end if;
+    raise exception 'idempotent request is already being processed; retry safely' using errcode = '40001';
+  end if;
+
+  select coalesce(sum(le.amount_paise),0) into v_balance
+  from public.ledger_entries le where le.business_id=p_business_id and le.customer_id=p_customer_id;
+  if v_balance <= 0 or p_amount_paise > v_balance then
+    raise exception 'payment exceeds the current outstanding khata balance' using errcode = '22023';
+  end if;
+
+  insert into public.business_transactions(business_id,customer_id,actor_id,transaction_type,amount_paise,currency,payment_method,idempotency_key)
+  values (p_business_id,p_customer_id,v_actor,'payment',p_amount_paise,p_currency,p_payment_method,p_idempotency_key)
+  returning id into v_tx_id;
+  insert into public.ledger_entries(business_id,customer_id,transaction_id,entry_type,amount_paise,currency)
+  values (p_business_id,p_customer_id,v_tx_id,'payment',-p_amount_paise,p_currency);
+  update public.idempotency_claims set transaction_id=v_tx_id
+  where business_id=p_business_id and actor_id=v_actor and idempotency_key=p_idempotency_key;
+  return jsonb_build_object('transaction_id',v_tx_id,'replayed',false);
+end;
+$$;
+
+create or replace function public.record_customer_payment(
+  p_business_id uuid,p_customer_id uuid,p_amount_paise bigint,p_currency text,
+  p_idempotency_key text,p_payment_method text,p_confirmed boolean
+) returns jsonb language sql security invoker set search_path = ''
+as $$ select private.record_customer_payment($1,$2,$3,$4,$5,$6,$7); $$;
+
+-- A mistaken payment can be compensated without editing the original receipt or ledger row.
+create or replace function private.reverse_customer_payment(
+  p_business_id uuid,p_original_transaction_id uuid,p_idempotency_key text,p_confirmed boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_original public.business_transactions%rowtype;
+  v_reversal_id uuid;
+  v_claimed integer;
+  v_fingerprint text;
+  v_existing_fingerprint text;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
+  if p_idempotency_key is null or p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128}$' then raise exception 'invalid idempotency key' using errcode = '22023'; end if;
+  if not exists (
+    select 1 from public.business_memberships m where m.business_id=p_business_id
+      and m.user_id=v_actor and m.status='active' and m.role in ('owner','admin')
+  ) then raise exception 'business access denied' using errcode = '42501'; end if;
+
+  v_fingerprint := jsonb_build_object('original_transaction_id',p_original_transaction_id)::text;
+  insert into public.idempotency_claims(business_id,actor_id,idempotency_key,request_fingerprint)
+  values (p_business_id,v_actor,p_idempotency_key,v_fingerprint) on conflict do nothing;
+  get diagnostics v_claimed = row_count;
+  if v_claimed=0 then
+    select ic.transaction_id,ic.request_fingerprint into v_reversal_id,v_existing_fingerprint
+    from public.idempotency_claims ic where ic.business_id=p_business_id and ic.actor_id=v_actor and ic.idempotency_key=p_idempotency_key;
+    if v_existing_fingerprint is distinct from v_fingerprint then raise exception 'idempotency key reused with different request' using errcode = '23505'; end if;
+    if v_reversal_id is not null then return jsonb_build_object('transaction_id',v_reversal_id,'replayed',true); end if;
+    raise exception 'idempotent request is already being processed; retry safely' using errcode = '40001';
+  end if;
+
+  select t.* into v_original from public.business_transactions t
+  where t.id=p_original_transaction_id and t.business_id=p_business_id and t.transaction_type='payment'
+  for update;
+  if not found then raise exception 'original payment not found' using errcode = '22023'; end if;
+  if exists (select 1 from public.business_transactions r where r.reversal_of=v_original.id) then
+    raise exception 'payment has already been reversed' using errcode = '23505';
+  end if;
+
+  insert into public.business_transactions(business_id,customer_id,actor_id,transaction_type,amount_paise,currency,idempotency_key,reversal_of)
+  values (p_business_id,v_original.customer_id,v_actor,'reversal',v_original.amount_paise,v_original.currency,p_idempotency_key,v_original.id)
+  returning id into v_reversal_id;
+  insert into public.ledger_entries(business_id,customer_id,transaction_id,entry_type,amount_paise,currency)
+  values (p_business_id,v_original.customer_id,v_reversal_id,'payment_reversal',v_original.amount_paise,v_original.currency);
+  update public.idempotency_claims set transaction_id=v_reversal_id
+  where business_id=p_business_id and actor_id=v_actor and idempotency_key=p_idempotency_key;
+  return jsonb_build_object('transaction_id',v_reversal_id,'replayed',false);
+end;
+$$;
+
+create or replace function public.reverse_customer_payment(
+  p_business_id uuid,p_original_transaction_id uuid,p_idempotency_key text,p_confirmed boolean
+) returns jsonb language sql security invoker set search_path = ''
+as $$ select private.reverse_customer_payment($1,$2,$3,$4); $$;
+
+revoke all on function private.record_customer_payment(uuid,uuid,bigint,text,text,text,boolean) from public,anon;
+grant execute on function private.record_customer_payment(uuid,uuid,bigint,text,text,text,boolean) to authenticated;
+revoke all on function public.record_customer_payment(uuid,uuid,bigint,text,text,text,boolean) from public,anon;
+grant execute on function public.record_customer_payment(uuid,uuid,bigint,text,text,text,boolean) to authenticated;
+
+revoke all on function private.reverse_customer_payment(uuid,uuid,text,boolean) from public,anon;
+grant execute on function private.reverse_customer_payment(uuid,uuid,text,boolean) to authenticated;
+revoke all on function public.reverse_customer_payment(uuid,uuid,text,boolean) from public,anon;
+grant execute on function public.reverse_customer_payment(uuid,uuid,text,boolean) to authenticated;
