@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { BookOpen, Boxes, CreditCard, FileText, Search, ShoppingBag, Users } from "lucide-react";
 import { useBusiness } from "../business/BusinessContext";
 import { supabase } from "../lib/supabase";
-import { rupeesToPaise } from "../domain/transaction";
+import { rupeesToPaise, validateCreditSale } from "../domain/transaction";
 
 type Props={active:string};
 type Customer={id:string;name:string;phone:string;balance:number;last:string};
@@ -131,7 +131,99 @@ function Inventory(){
  </>;
 }
 
-function Billing(){return <><Header eyebrow="SALES WORKSPACE" title="Sales & billing" description="Prepare itemised bills and review totals before issuing." icon={ShoppingBag}/><Notice/><div className="workspace-two-column"><section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Billing workflow</h2><p>Production billing will use live customer and catalogue data.</p></div></div><div className="workflow-steps"><div><span>1</span><strong>Select customer</strong><small>Resolve the correct customer account.</small></div><div><span>2</span><strong>Add items</strong><small>Confirm units, quantities and prices.</small></div><div><span>3</span><strong>Review bill</strong><small>Verify totals and payment method.</small></div><div><span>4</span><strong>Confirm</strong><small>Server validates and commits atomically.</small></div></div></section><section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Safety checks</h2><p>Required before a real sale is recorded.</p></div></div><div className="safety-check-list"><p><span>✓</span> Business membership verified</p><p><span>✓</span> Integer-paise money</p><p><span>✓</span> Stock checked in transaction</p><p><span>✓</span> Idempotent commits</p><p><span>✓</span> Append-only reversals</p></div><div className="detail-footnote">Billing confirmation UI is still under development.</div></section></div></>;}
+function Billing(){
+ const {business,configured}=useBusiness();
+ const [customers,setCustomers]=useState<{id:string;name:string}[]>([]);
+ const [products,setProducts]=useState<Product[]>([]);
+ const [customerId,setCustomerId]=useState(""),[productId,setProductId]=useState(""),[quantity,setQuantity]=useState("1");
+ const [lines,setLines]=useState<{productId:string;name:string;unit:string;quantity:string;unitPricePaise:number}[]>([]);
+ const [reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false),[loading,setLoading]=useState(configured),[error,setError]=useState(""),[success,setSuccess]=useState("");
+ const [idempotencyKey,setIdempotencyKey]=useState(()=>crypto.randomUUID());
+ useEffect(()=>{
+  if(!supabase||!business)return;let active=true;setLoading(true);
+  void Promise.all([
+   supabase.from("customers").select("id,display_name").eq("business_id",business.id).order("display_name"),
+   supabase.from("products").select("id,name,unit_label,unit_price_paise,stock_on_hand").eq("business_id",business.id).eq("is_active",true).order("name")
+  ]).then(([cs,ps])=>{
+   if(!active)return;
+   if(cs.error||ps.error){setError("Customer or catalogue data could not be loaded.");}
+   else{
+    setCustomers((cs.data??[]).map(x=>({id:x.id,name:x.display_name})));
+    setProducts((ps.data??[]).map(x=>({id:x.id,name:x.name,unit:x.unit_label,stock:Number(x.stock_on_hand),price:Number(x.unit_price_paise)})));
+   }
+   setLoading(false);
+  });
+  return()=>{active=false;};
+ },[business?.id,configured]);
+ const selectedProduct=products.find(x=>x.id===productId);
+ const totalPaise=lines.reduce((sum,line)=>{
+  const [whole,fraction=""]=line.quantity.split(".");
+  const milli=BigInt(whole)*1000n+BigInt(fraction.padEnd(3,"0"));
+  return sum+(milli*BigInt(line.unitPricePaise))/1000n;
+ },0n);
+ const totalSafe=totalPaise<=BigInt(Number.MAX_SAFE_INTEGER);
+ function changePayload(){setReviewed(false);setSuccess("");setIdempotencyKey(crypto.randomUUID());}
+ function addLine(){
+  if(!selectedProduct)return;
+  if(!/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.test(quantity)||Number(quantity)<=0){setError("Enter a quantity greater than zero with up to three decimal places.");return;}
+  const [whole,fraction=""]=quantity.split(".");
+  const milli=BigInt(whole)*1000n+BigInt(fraction.padEnd(3,"0"));
+  const lineMilliPaise=milli*BigInt(selectedProduct.price);
+  if(lineMilliPaise%1000n!==0n){setError("This quantity and price would create a fractional paise. Adjust the quantity or price.");return;}
+  const already=lines.filter(x=>x.productId===selectedProduct.id).reduce((sum,x)=>sum+Number(x.quantity),0);
+  if(already+Number(quantity)>selectedProduct.stock){setError("Requested quantity exceeds the currently displayed stock.");return;}
+  setLines(current=>[...current,{productId:selectedProduct.id,name:selectedProduct.name,unit:selectedProduct.unit,quantity,unitPricePaise:selectedProduct.price}]);
+  setError("");changePayload();setQuantity("1");
+ }
+ function removeLine(index:number){setLines(current=>current.filter((_,i)=>i!==index));changePayload();}
+ async function confirmSale(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();if(!supabase||!business||!customerId||!lines.length||!reviewed||!totalSafe)return;
+  const command={businessId:business.id,customerId,amountPaise:Number(totalPaise),currency:"INR" as const,idempotencyKey,confirmed:true,items:lines.map(x=>({productId:x.productId,quantity:x.quantity,unitPricePaise:x.unitPricePaise}))};
+  const issues=validateCreditSale(command);
+  if(issues.length){setError(issues.map(x=>x.message).join(" "));return;}
+  setBusy(true);setError("");setSuccess("");
+  const {data,error:invokeError}=await supabase.functions.invoke("record-credit-sale",{body:{
+   business_id:business.id,customer_id:customerId,amount_paise:Number(totalPaise),currency:"INR",
+   idempotency_key:idempotencyKey,confirmed:true,
+   items:lines.map(x=>({product_id:x.productId,quantity:Number(x.quantity),unit_price_paise:x.unitPricePaise}))
+  }});
+  if(invokeError){setError("Sale was not confirmed by the server. Review stock and prices before retrying. The same request key is retained for a safe retry.");setBusy(false);return;}
+  const transactionId=data?.result?.transaction_id;
+  setSuccess("Credit sale recorded. Ledger and inventory were updated atomically."+ (transactionId?" Reference: "+transactionId:""));
+  setLines([]);setReviewed(false);setIdempotencyKey(crypto.randomUUID());setBusy(false);
+  const refreshed=await supabase.from("products").select("id,name,unit_label,unit_price_paise,stock_on_hand").eq("business_id",business.id).eq("is_active",true).order("name");
+  if(!refreshed.error)setProducts((refreshed.data??[]).map(x=>({id:x.id,name:x.name,unit:x.unit_label,stock:Number(x.stock_on_hand),price:Number(x.unit_price_paise)})));
+ }
+ if(!configured)return <><Header eyebrow="SALES WORKSPACE" title="Sales & billing" description="Prepare itemised bills and review totals before issuing." icon={ShoppingBag}/><Notice/><section className="workspace-panel empty-workspace"><ShoppingBag size={28}/><h2>Billing preview</h2><p>Connect the dedicated backend environment to enable customer selection, live prices, stock checks and explicit sale confirmation.</p></section></>;
+ return <>
+  <Header eyebrow="SALES WORKSPACE" title="Sales & billing" description="Prepare a credit sale, review every line and explicitly confirm before saving." icon={ShoppingBag}/>
+  <div className="demo-notice"><span className="live-dot"/> Live business data · Sale writes require explicit review and confirmation</div>
+  {loading?<div className="workspace-panel empty-inline">Loading customers and catalogue…</div>:<form className="billing-layout" onSubmit={confirmSale}>
+   <section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Build credit sale</h2><p>Prices and stock are loaded from your business catalogue.</p></div><span className="count-pill">INR · paise-safe</span></div>
+    <label className="billing-field">Customer<select required value={customerId} onChange={e=>{setCustomerId(e.target.value);changePayload();}}><option value="">Choose a customer…</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+    <div className="billing-add-row"><label className="billing-field">Product<select value={productId} onChange={e=>setProductId(e.target.value)}><option value="">Choose product…</option>{products.map(x=><option key={x.id} value={x.id} disabled={x.stock<=0}>{x.name} · {money(x.price)} / {x.unit} · stock {x.stock}</option>)}</select></label><label className="billing-field quantity-field">Quantity<input inputMode="decimal" value={quantity} onChange={e=>setQuantity(e.target.value)} placeholder="1.000"/></label><button type="button" className="subtle-button add-line-button" disabled={!selectedProduct||selectedProduct.stock<=0} onClick={addLine}>Add item</button></div>
+    {error&&<p className="auth-error" role="alert">{error}</p>}
+    <div className="billing-lines"><div className="billing-line billing-line-head"><span>Item</span><span>Qty</span><span>Unit price</span><span>Line total</span><span/></div>{lines.map((line,index)=>{
+      const [whole,fraction=""]=line.quantity.split("."),milli=BigInt(whole)*1000n+BigInt(fraction.padEnd(3,"0"));
+      const lineTotal=Number((milli*BigInt(line.unitPricePaise))/1000n);
+      return <div className="billing-line" key={line.productId+"-"+index}><span><strong>{line.name}</strong><small>per {line.unit}</small></span><span>{line.quantity} {line.unit}</span><span>{money(line.unitPricePaise)}</span><strong>{money(lineTotal)}</strong><button type="button" aria-label={"Remove "+line.name} onClick={()=>removeLine(index)}>×</button></div>;
+    })}{!lines.length&&<div className="empty-inline">Add confirmed products to build the bill.</div>}</div>
+    <div className="billing-total"><span>Credit sale total</span><strong>{totalSafe?money(Number(totalPaise)):"Amount too large"}</strong></div>
+   </section>
+   <aside className="workspace-panel billing-review"><div className="workspace-panel-heading"><div><h2>Review & confirm</h2><p>Nothing is saved until you confirm.</p></div></div>
+    <div className="review-row"><span>Customer</span><strong>{customers.find(x=>x.id===customerId)?.name??"Not selected"}</strong></div>
+    <div className="review-row"><span>Items</span><strong>{lines.length}</strong></div>
+    <div className="review-row"><span>Currency</span><strong>INR</strong></div>
+    <div className="review-total"><small>Amount to add to khata</small><strong>{totalSafe?money(Number(totalPaise)):"—"}</strong></div>
+    <label className="confirm-review"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/><span>I have checked the customer, quantities, unit prices and total. I confirm this credit sale.</span></label>
+    <button className="auth-submit confirm-sale-button" disabled={busy||!customerId||!lines.length||!reviewed||!totalSafe}>{busy?"Saving securely…":"Confirm credit sale"}</button>
+    <p className="detail-footnote">The server rechecks membership, catalogue prices, stock, totals and idempotency inside one database transaction.</p>
+    {success&&<p className="auth-success" role="status">{success}</p>}
+   </aside>
+  </form>}
+  {!customers.length&&!loading&&<p className="detail-footnote">Add a customer before creating a credit sale. The customer directory is available in the Customers workspace.</p>}
+ </>;
+}
 function Payments(){return <><Header eyebrow="CASH FLOW" title="Payments" description="Track how customers settle outstanding balances." icon={CreditCard}/><Notice/><section className="workspace-panel empty-workspace"><CreditCard size={28}/><h2>Payment receipts are next</h2><p>Payment recording and reconciliation will follow the ledger receipt workflow.</p></section></>;}
 export default function WorkspacePage({active}:Props){
  if(active==="Customers")return <Customers/>;
