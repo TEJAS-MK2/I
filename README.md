@@ -26,13 +26,15 @@ Make everyday business operations easier for people who are busy serving custome
 - [ ] Production speech provider and frontend confirmation integration
 - [x] Customer, khata, inventory and billing workspace screens; customer/ledger/inventory source is wired for a configured backend
 - [x] Installable PWA shell with static-only offline fallback
-- [ ] Billing confirmation UI and payment receipt workflow
+- [x] Reviewed credit-sale billing and explicit confirmation UI (requires hosted project)
+- [x] Customer payment recording and owner/admin payment reversal workflow
+- [ ] External payment gateway reconciliation and receipt delivery
 - [ ] Phase 5 transaction intelligence
 - [ ] Phase 6 customer communication
 - [ ] Phase 7 local logistics
 - [ ] Phase 8 production hardening
 
-The repository now contains environment-gated Supabase Auth, first-business onboarding, customer and product create flows, live customer/ledger/inventory query integration source, and an installable PWA shell. Without a dedicated project and environment variables, the app deliberately remains in clearly labelled sample preview mode. Its service worker caches only same-origin static app assets and never caches auth, database, function, storage or other API responses. Offline mode is shell-only; it does not queue or commit financial changes. The repository also contains a CI-tested Postgres backend schema and authenticated Edge Function source for credit sales and reversals. These are not yet applied or deployed to a dedicated hosted Boli-Khata project. No production speech provider, payment integration or WhatsApp integration is configured yet.
+The repository now contains environment-gated Supabase Auth, first-business onboarding, customer and product create flows, live customer/ledger/inventory query integration source, and an installable PWA shell. Without a dedicated project and environment variables, the app deliberately remains in clearly labelled sample preview mode. Its service worker caches only same-origin static app assets and never caches auth, database, function, storage or other API responses. Offline mode is shell-only; it does not queue or commit financial changes. The repository also contains CI-tested Postgres procedures and authenticated Edge Function source for business setup, credit sales, sale reversals, customer payments and payment reversals. These are not yet applied or deployed to a dedicated hosted Boli-Khata project. No production speech provider, payment integration or WhatsApp integration is configured yet.
 
 ## Technology direction
 
