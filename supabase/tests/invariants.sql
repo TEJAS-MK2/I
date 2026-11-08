@@ -52,6 +52,33 @@ begin
   if (select amount_paise from public.ledger_entries where transaction_id=current_setting('test.sale_id')::uuid) <> 30000 then raise exception 'ledger amount failed'; end if;
 end $$;
 
+-- Reusing an idempotency key with a different payload must be rejected.
+do $
+begin
+  begin
+    perform public.record_credit_sale(
+      '123e4567-e89b-42d3-a456-426614174100',
+      '123e4567-e89b-42d3-a456-426614174101',
+      45000,'INR','ci-credit-sale-key-0001',
+      '[{"product_id":"123e4567-e89b-42d3-a456-426614174102","quantity":3,"unit_price_paise":15000}]'::jsonb,
+      true
+    );
+    raise exception 'expected idempotency fingerprint rejection';
+  exception when unique_violation then null;
+  end;
+end $;
+
+-- Authenticated clients cannot write ledger rows directly around the atomic RPC.
+do $
+begin
+  begin
+    insert into public.ledger_entries(business_id,customer_id,transaction_id,entry_type,amount_paise,currency)
+    values ('123e4567-e89b-42d3-a456-426614174100','123e4567-e89b-42d3-a456-426614174101',current_setting('test.sale_id')::uuid,'credit_sale',1,'INR');
+    raise exception 'expected direct-write privilege rejection';
+  exception when insufficient_privilege then null;
+  end;
+end $;
+
 -- An overdrawn sale must fail and roll back its idempotency claim and all writes.
 do $$
 begin
