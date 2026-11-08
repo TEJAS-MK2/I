@@ -2,7 +2,7 @@ name: Backend function and database checks
 
 on:
   push:
-    branches: [main, "phase-1/**"]
+    branches: [main]
     paths:
       - "supabase/**"
       - ".github/workflows/backend.yml"
