@@ -202,8 +202,8 @@ export function CommunicationsPage() {
       <section className="workspace-panel">
         <div className="workspace-panel-heading"><div><h2>Queue a notification</h2><p>Requires explicit channel opt-in.</p></div><span className="count-pill">Queue only</span></div>
         <form className="operations-form single-column" onSubmit={queueMessage}>
-          <label>Customer<select required value={customerId} onChange={e=>setCustomerId(e.target.value)}><option value="">Choose customer…</option>{customers.map(c=><option key={c.id} value={c.id}>{c.display_name}</option>)}</select></label>
-          <label>Channel<select value={channel} onChange={e=>setChannel(e.target.value)}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></label>
+          <label>Customer<select required value={customerId} onChange={e=>{setCustomerId(e.target.value);setNotificationKey(crypto.randomUUID());}}><option value="">Choose customer…</option>{customers.map(c=><option key={c.id} value={c.id}>{c.display_name}</option>)}</select></label>
+          <label>Channel<select value={channel} onChange={e=>{setChannel(e.target.value);setNotificationKey(crypto.randomUUID());}}><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></label>
           <label>Purpose<select value={purpose} onChange={e=>{setPurpose(e.target.value);setNotificationKey(crypto.randomUUID());}}><option value="delivery_update">Delivery update</option><option value="receipt">Receipt</option><option value="payment_reminder">Payment reminder</option><option value="general">General</option></select></label>
           <label>Template key<input required maxLength={80} value={template} onChange={e=>{setTemplate(e.target.value);setNotificationKey(crypto.randomUUID());}}/></label>
           <label>Message<textarea required maxLength={2000} value={message} onChange={e=>{setMessage(e.target.value);setNotificationKey(crypto.randomUUID());}} placeholder="Write the notification text…"/></label>
