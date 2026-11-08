@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.reverse-credit-sale]
 verify_jwt = true
+
+[functions.business-setup]
+verify_jwt = true
