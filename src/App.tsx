@@ -1,5 +1,6 @@
 import { useState } from "react";
 import VoiceWorkspace from "./voice/VoiceWorkspace";
+import WorkspacePage from "./features/WorkspacePage";
 import {
   Activity, ArrowUpRight, Bell, BookOpen, Boxes, ChevronDown, CircleHelp,
   Command, CreditCard, LayoutDashboard, Mic, Package, Plus, Search,
@@ -47,7 +48,7 @@ export default function App() {
       </aside>
       <main className="main-area">
         <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>{active}</strong></div><div className="top-actions"><div className="search-box"><Search size={16} /><input aria-label="Search" placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button" aria-label="Notifications"><Bell size={18} /><i /></button><div className="top-avatar">PS</div></div></header>
-        <div className="page-content">
+        <div className="page-content">{active === "Overview" ? <>
           <section className="welcome-row"><div><div className="eyebrow"><span className="live-dot" /> YOUR BUSINESS AT A GLANCE</div><h1>Good morning, Priya <span>✳</span></h1><p>Here's what's happening with your store today.</p></div><button className="date-button">Today, 8 November <ChevronDown size={15} /></button></section>
           <section className="voice-banner"><div className="voice-orb"><Mic size={23} /></div><div className="voice-copy"><span className="voice-kicker">MEET YOUR BUSINESS ASSISTANT</span><h2>Your shop. Your language. Your pace.</h2><p>Speak naturally or type what you need. Boli-Khata is being built to make everyday shop work simpler.</p></div><button className="voice-button" onClick={() => setVoiceOpen(!voiceOpen)}><Mic size={17} /> Try voice workspace</button><div className="banner-decoration" /></section>
           {voiceOpen && <VoiceWorkspace />}
@@ -63,7 +64,7 @@ export default function App() {
             <article className="panel"><div className="panel-heading"><div><h2>Quick actions</h2><p>Common tasks, one tap away.</p></div><span className="quick-spark"><Sparkles size={17}/></span></div><div className="quick-actions"><button onClick={()=>setActive("Customers")}><span className="quick-icon lilac"><Users size={18}/></span><span><strong>Add customer</strong><small>Create a customer profile</small></span><Plus size={16}/></button><button onClick={()=>setActive("Khata ledger")}><span className="quick-icon peach"><BookOpen size={18}/></span><span><strong>Record udhar</strong><small>Log a credit entry</small></span><Plus size={16}/></button><button onClick={()=>setActive("Inventory")}><span className="quick-icon mint"><Package size={18}/></span><span><strong>Add a product</strong><small>Update your catalogue</small></span><Plus size={16}/></button></div></article>
           </section>
           <footer className="page-footer"><span>© 2026 Boli-Khata</span><span><i className="footer-dot"/> Foundation preview · Sample data only</span><span>Made for everyday business <b className="footer-heart">♥</b></span></footer>
-        </div>
+        </> : <WorkspacePage active={active}/>}</div>
       </main>
     </div>
   );
