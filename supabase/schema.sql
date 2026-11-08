@@ -99,6 +99,7 @@ create table public.idempotency_claims (
   actor_id uuid not null references auth.users(id) on delete restrict,
   idempotency_key text not null check (length(idempotency_key) between 16 and 128),
   transaction_id uuid references public.business_transactions(id) on delete restrict,
+  request_fingerprint text not null check (length(request_fingerprint) = 64),
   created_at timestamptz not null default now(),
   primary key (business_id, actor_id, idempotency_key)
 );
@@ -186,13 +187,16 @@ declare
   v_item record;
   v_line_total bigint;
   v_claimed integer;
+  v_fingerprint text;
+  v_existing_fingerprint text;
 begin
   if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
   if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
   if p_amount_paise is null or p_amount_paise <= 0 then raise exception 'amount must be positive paise' using errcode = '22023'; end if;
   if p_currency is distinct from 'INR' then raise exception 'unsupported currency' using errcode = '22023'; end if;
   if p_idempotency_key is null or p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128}$' then raise exception 'invalid idempotency key' using errcode = '22023'; end if;
-  if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) not between 1 and 50 then raise exception '1 to 50 items are required' using errcode = '22023'; end if;
+  if jsonb_typeof(p_items) is distinct from 'array' then raise exception 'items must be an array' using errcode = '22023'; end if;
+  if jsonb_array_length(p_items) not between 1 and 50 then raise exception '1 to 50 items are required' using errcode = '22023'; end if;
   if not exists (
     select 1 from public.business_memberships m
     where m.business_id = p_business_id and m.user_id = v_actor
@@ -202,13 +206,15 @@ begin
     raise exception 'customer not found in this business' using errcode = '22023';
   end if;
 
-  insert into public.idempotency_claims(business_id, actor_id, idempotency_key)
-  values (p_business_id, v_actor, p_idempotency_key)
+  v_fingerprint := encode(public.digest(jsonb_build_object('customer_id',p_customer_id,'amount_paise',p_amount_paise,'currency',p_currency,'items',p_items)::text,'sha256'),'hex');
+  insert into public.idempotency_claims(business_id, actor_id, idempotency_key, request_fingerprint)
+  values (p_business_id, v_actor, p_idempotency_key, v_fingerprint)
   on conflict do nothing;
   get diagnostics v_claimed = row_count;
   if v_claimed = 0 then
-    select ic.transaction_id into v_tx_id from public.idempotency_claims ic
+    select ic.transaction_id, ic.request_fingerprint into v_tx_id, v_existing_fingerprint from public.idempotency_claims ic
     where ic.business_id = p_business_id and ic.actor_id = v_actor and ic.idempotency_key = p_idempotency_key;
+    if v_existing_fingerprint is distinct from v_fingerprint then raise exception 'idempotency key reused with different request' using errcode = '23505'; end if;
     if v_tx_id is not null then return jsonb_build_object('transaction_id', v_tx_id, 'replayed', true); end if;
     raise exception 'idempotent request is already being processed; retry safely' using errcode = '40001';
   end if;
@@ -304,13 +310,15 @@ begin
       and m.status = 'active' and m.role in ('owner','admin')
   ) then raise exception 'business access denied' using errcode = '42501'; end if;
 
-  insert into public.idempotency_claims(business_id, actor_id, idempotency_key)
-  values (p_business_id, v_actor, p_idempotency_key)
+  v_fingerprint := encode(public.digest(jsonb_build_object('original_transaction_id',p_original_transaction_id)::text,'sha256'),'hex');
+  insert into public.idempotency_claims(business_id, actor_id, idempotency_key, request_fingerprint)
+  values (p_business_id, v_actor, p_idempotency_key, v_fingerprint)
   on conflict do nothing;
   get diagnostics v_claimed = row_count;
   if v_claimed = 0 then
-    select ic.transaction_id into v_reversal_id from public.idempotency_claims ic
+    select ic.transaction_id, ic.request_fingerprint into v_reversal_id, v_existing_fingerprint from public.idempotency_claims ic
     where ic.business_id = p_business_id and ic.actor_id = v_actor and ic.idempotency_key = p_idempotency_key;
+    if v_existing_fingerprint is distinct from v_fingerprint then raise exception 'idempotency key reused with different request' using errcode = '23505'; end if;
     if v_reversal_id is not null then return jsonb_build_object('transaction_id', v_reversal_id, 'replayed', true); end if;
     raise exception 'idempotent request is already being processed; retry safely' using errcode = '40001';
   end if;
