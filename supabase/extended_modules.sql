@@ -233,7 +233,7 @@ create or replace function private.create_delivery_job(
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $body$
 declare
   v_actor uuid := auth.uid();
   v_job_id uuid;
@@ -296,7 +296,7 @@ begin
   values (p_business_id, v_actor, 'delivery.created', 'delivery_job', v_job_id);
   return jsonb_build_object('delivery_job_id',v_job_id,'replayed',false);
 end;
-$;
+$body$;
 
 create or replace function public.create_delivery_job(
   p_business_id uuid,
@@ -313,9 +313,9 @@ create or replace function public.create_delivery_job(
 language sql
 security invoker
 set search_path = ''
-as $
+as $body$
   select private.create_delivery_job($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
-$;
+$body$;
 
 create or replace function private.assign_delivery_job(
   p_business_id uuid,
@@ -326,7 +326,7 @@ create or replace function private.assign_delivery_job(
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $body$
 declare
   v_actor uuid := auth.uid();
   v_status text;
@@ -362,7 +362,7 @@ begin
   values (p_business_id, v_actor, 'delivery.assigned', 'delivery_job', p_delivery_job_id);
   return jsonb_build_object('delivery_job_id',p_delivery_job_id,'assigned_user_id',p_assigned_user_id);
 end;
-$;
+$body$;
 
 create or replace function public.assign_delivery_job(
   p_business_id uuid,
@@ -373,9 +373,9 @@ create or replace function public.assign_delivery_job(
 language sql
 security invoker
 set search_path = ''
-as $
+as $body$
   select private.assign_delivery_job($1,$2,$3,$4);
-$;
+$body$;
 
 create or replace function private.record_delivery_event(
   p_business_id uuid,
@@ -387,7 +387,7 @@ create or replace function private.record_delivery_event(
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $body$
 declare
   v_actor uuid := auth.uid();
   v_job public.delivery_jobs%rowtype;
@@ -457,7 +457,7 @@ begin
   values (p_business_id, v_actor, 'delivery.' || p_event_type, 'delivery_job', p_delivery_job_id);
   return jsonb_build_object('delivery_job_id',p_delivery_job_id,'status',v_next_status);
 end;
-$;
+$body$;
 
 create or replace function public.record_delivery_event(
   p_business_id uuid,
@@ -469,9 +469,9 @@ create or replace function public.record_delivery_event(
 language sql
 security invoker
 set search_path = ''
-as $
+as $body$
   select private.record_delivery_event($1,$2,$3,$4,$5);
-$;
+$body$;
 
 revoke all on function private.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) from public, anon;
 revoke all on function private.assign_delivery_job(uuid,uuid,uuid,boolean) from public, anon;
@@ -500,7 +500,7 @@ create or replace function private.set_customer_communication_preference(
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $body$
 declare
   v_actor uuid := auth.uid();
 begin
@@ -536,7 +536,7 @@ begin
     'customer', p_customer_id, jsonb_build_object('channel',p_channel,'source',trim(p_consent_source)));
   return jsonb_build_object('customer_id',p_customer_id,'channel',p_channel,'consent_status',p_consent_status);
 end;
-$;
+$body$;
 
 create or replace function public.set_customer_communication_preference(
   p_business_id uuid,
@@ -549,9 +549,9 @@ create or replace function public.set_customer_communication_preference(
 language sql
 security invoker
 set search_path = ''
-as $
+as $body$
   select private.set_customer_communication_preference($1,$2,$3,$4,$5,$6);
-$;
+$body$;
 
 create or replace function private.queue_customer_notification(
   p_business_id uuid,
@@ -566,7 +566,7 @@ create or replace function private.queue_customer_notification(
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $body$
 declare
   v_actor uuid := auth.uid();
   v_job_id uuid;
@@ -622,7 +622,7 @@ begin
   values (p_business_id, v_actor, 'notification.queued', 'notification_job', v_job_id);
   return jsonb_build_object('notification_job_id',v_job_id,'replayed',false);
 end;
-$;
+$body$;
 
 create or replace function public.queue_customer_notification(
   p_business_id uuid,
@@ -637,9 +637,9 @@ create or replace function public.queue_customer_notification(
 language sql
 security invoker
 set search_path = ''
-as $
+as $body$
   select private.queue_customer_notification($1,$2,$3,$4,$5,$6,$7,$8);
-$;
+$body$;
 
 revoke all on function private.set_customer_communication_preference(uuid,uuid,text,text,text,boolean) from public, anon;
 revoke all on function private.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) from public, anon;
