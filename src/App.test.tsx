@@ -18,7 +18,8 @@ describe("Boli-Khata foundation dashboard", () => {
   it("opens the voice preview without claiming live speech recognition", () => {
     render(<App />);
     fireEvent.click(screen.getAllByRole("button", { name: /try voice workspace/i })[0]);
-    expect(screen.getByText(/voice capture is planned for phase 2/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /say it your way\. review before saving/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/recognition language/i)).toBeInTheDocument();
   });
 
   it("updates the workspace breadcrumb when a section is selected", () => {
