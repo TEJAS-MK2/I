@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowUpRight, MessageCircle, PackageCheck, Truck } from "lucide-react";
+import { ArrowUpRight, MessageCircle, Truck } from "lucide-react";
 import { useBusiness } from "../business/BusinessContext";
 import { supabase } from "../lib/supabase";
 import { rupeesToPaise } from "../domain/transaction";
