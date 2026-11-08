@@ -23,7 +23,11 @@ The backend source in this directory is a reviewed implementation candidate. It 
 ## Edge Functions
 
 `functions/business-setup/index.ts` handles business onboarding plus customer and product creation through database RPCs.
-`functions/record-credit-sale/index.ts` verifies the bearer session with `auth.getUser`, validates request shape, and forwards the caller JWT to the database RPC.\n\n`functions/reverse-credit-sale/index.ts` exposes the owner/admin-only compensating reversal RPC.\n\nAll three handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
+`functions/record-credit-sale/index.ts` verifies the bearer session with `auth.getUser`, validates request shape, and forwards the caller JWT to the database RPC.
+
+`functions/reverse-credit-sale/index.ts` exposes the owner/admin-only compensating reversal RPC.
+
+All three handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
 
 Required environment:
 - `SUPABASE_URL`
