@@ -29,12 +29,12 @@ select public.create_product(
 )->>'product_id' as product_id \gset new_product_
 select set_config('test.created_product', :'new_product_product_id', false);
 
-do $
+do $master_data_test$
 begin
   if not exists (select 1 from public.customers where display_name='New Customer' and phone_e164='+919876543210') then raise exception 'customer creation failed'; end if;
   if (select stock_on_hand from public.products where id=current_setting('test.created_product')::uuid) <> 4 then raise exception 'opening stock not created'; end if;
   if not exists (select 1 from public.inventory_movements where product_id=current_setting('test.created_product')::uuid and reason='opening_balance' and quantity_delta=4 and actor_id='123e4567-e89b-42d3-a456-426614174001') then raise exception 'opening stock audit movement missing'; end if;
-end $;
+end $master_data_test$;
 
 select public.record_credit_sale(
   '123e4567-e89b-42d3-a456-426614174100',
