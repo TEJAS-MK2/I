@@ -768,4 +768,109 @@ grant execute on function private.create_voice_proposal(uuid,text,text,text,text
 revoke all on function public.create_voice_proposal(uuid,text,text,text,text,jsonb,numeric,text[],text,boolean) from public, anon;
 grant execute on function public.create_voice_proposal(uuid,text,text,text,text,jsonb,numeric,text[],text,boolean) to authenticated;
 
+
+create table if not exists private.inventory_adjustment_claims (
+  business_id uuid not null references public.businesses(id) on delete restrict,
+  actor_id uuid not null references auth.users(id) on delete restrict,
+  idempotency_key text not null check (length(idempotency_key) between 16 and 128),
+  product_id uuid not null references public.products(id) on delete restrict,
+  request_fingerprint text not null check (length(request_fingerprint) between 2 and 2000),
+  created_at timestamptz not null default now(),
+  primary key (business_id, actor_id, idempotency_key)
+);
+revoke all on private.inventory_adjustment_claims from public, anon, authenticated;
+
+create or replace function private.adjust_stock(
+  p_business_id uuid,
+  p_product_id uuid,
+  p_quantity_delta numeric,
+  p_note text,
+  p_idempotency_key text,
+  p_confirmed boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $stock$
+declare
+  v_actor uuid := auth.uid();
+  v_current_stock numeric;
+  v_new_stock numeric;
+  v_existing_fingerprint text;
+  v_fingerprint text;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit stock adjustment confirmation required' using errcode = '22023'; end if;
+  if not exists (
+    select 1 from public.business_memberships m
+    where m.business_id = p_business_id and m.user_id = v_actor
+      and m.status = 'active' and m.role in ('owner','admin')
+  ) then raise exception 'stock adjustment permission denied' using errcode = '42501'; end if;
+  if p_quantity_delta is null or p_quantity_delta = 0 or scale(p_quantity_delta) > 3
+    or p_note is null or length(trim(p_note)) not between 1 and 300
+    or p_idempotency_key is null or length(p_idempotency_key) not between 16 and 128
+    or p_idempotency_key ~ '[^A-Za-z0-9._:-]' then
+    raise exception 'invalid stock adjustment' using errcode = '22023';
+  end if;
+  v_fingerprint := jsonb_build_object(
+    'product_id',p_product_id,'quantity_delta',p_quantity_delta,'note',trim(p_note)
+  )::text;
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_business_id::text || ':' || v_actor::text || ':' || p_idempotency_key, 0)
+  );
+  select c.request_fingerprint into v_existing_fingerprint
+  from private.inventory_adjustment_claims c
+  where c.business_id = p_business_id and c.actor_id = v_actor and c.idempotency_key = p_idempotency_key;
+  if found then
+    if v_existing_fingerprint is distinct from v_fingerprint then
+      raise exception 'idempotency key reused with different stock adjustment' using errcode = '23505';
+    end if;
+    select p.stock_on_hand into v_new_stock from public.products p
+    where p.id = p_product_id and p.business_id = p_business_id;
+    return jsonb_build_object('product_id',p_product_id,'stock_on_hand',v_new_stock,'replayed',true);
+  end if;
+
+  select p.stock_on_hand into v_current_stock from public.products p
+  where p.id = p_product_id and p.business_id = p_business_id and p.is_active = true
+  for update;
+  if not found then raise exception 'active product not found in this business' using errcode = '22023'; end if;
+  v_new_stock := v_current_stock + p_quantity_delta;
+  if v_new_stock < 0 then raise exception 'stock adjustment cannot make inventory negative' using errcode = '22023'; end if;
+
+  insert into private.inventory_adjustment_claims(
+    business_id, actor_id, idempotency_key, product_id, request_fingerprint
+  ) values (p_business_id, v_actor, p_idempotency_key, p_product_id, v_fingerprint);
+
+  update public.products set stock_on_hand = v_new_stock
+  where id = p_product_id and business_id = p_business_id;
+  insert into public.inventory_movements(
+    business_id, product_id, actor_id, transaction_id, quantity_delta, reason
+  ) values (p_business_id, p_product_id, v_actor, null, p_quantity_delta, 'stock_adjustment');
+  insert into public.audit_events(business_id, actor_id, action, entity_type, entity_id, metadata)
+  values (p_business_id, v_actor, 'inventory.stock_adjusted', 'product', p_product_id,
+    jsonb_build_object('quantity_delta',p_quantity_delta,'note',trim(p_note),'stock_after',v_new_stock));
+  return jsonb_build_object('product_id',p_product_id,'stock_on_hand',v_new_stock,'replayed',false);
+end;
+$stock$;
+
+create or replace function public.adjust_stock(
+  p_business_id uuid,
+  p_product_id uuid,
+  p_quantity_delta numeric,
+  p_note text,
+  p_idempotency_key text,
+  p_confirmed boolean
+) returns jsonb
+language sql
+security invoker
+set search_path = ''
+as $stock$
+  select private.adjust_stock($1,$2,$3,$4,$5,$6);
+$stock$;
+
+revoke all on function private.adjust_stock(uuid,uuid,numeric,text,text,boolean) from public, anon;
+grant execute on function private.adjust_stock(uuid,uuid,numeric,text,text,boolean) to authenticated;
+revoke all on function public.adjust_stock(uuid,uuid,numeric,text,text,boolean) from public, anon;
+grant execute on function public.adjust_stock(uuid,uuid,numeric,text,text,boolean) to authenticated;
+
 commit;
