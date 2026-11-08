@@ -30,7 +30,7 @@ function SearchBox({value,onChange,label}:{value:string;onChange:(v:string)=>voi
 function Customers(){
  const {business,configured}=useBusiness();
  const [rows,setRows]=useState<Customer[]>(configured?[]:sampleCustomers),[query,setQuery]=useState(""),[selected,setSelected]=useState(""),[adding,setAdding]=useState(false);
- const [name,setName]=useState(""),[phone,setPhone]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const [name,setName]=useState(""),[phone,setPhone]=useState(""),[customerKey,setCustomerKey]=useState(()=>crypto.randomUUID()),[busy,setBusy]=useState(false),[error,setError]=useState("");
  async function load(){
   if(!supabase||!business)return;
   const [cs,ls]=await Promise.all([
@@ -48,9 +48,9 @@ function Customers(){
  const current=rows.find(x=>x.id===selected);
  async function create(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!supabase||!business)return;setBusy(true);setError("");
-  const {error:e}=await supabase.functions.invoke("business-setup",{body:{action:"create_customer",business_id:business.id,display_name:name.trim(),phone_e164:phone.trim()||null}});
+  const {error:e}=await supabase.functions.invoke("business-setup",{body:{action:"create_customer",business_id:business.id,display_name:name.trim(),phone_e164:phone.trim()||null,idempotency_key:customerKey}});
   if(e){setError("Customer could not be created. Check the phone format and retry.");setBusy(false);return;}
-  setName("");setPhone("");setAdding(false);await load();setBusy(false);
+  setName("");setPhone("");setAdding(false);setCustomerKey(crypto.randomUUID());await load();setBusy(false);
  }
  return <>
   <Header eyebrow="CUSTOMER RELATIONSHIPS" title="Customers" description="Find customers and understand their account at a glance." icon={Users}/>
@@ -58,7 +58,7 @@ function Customers(){
   <div className="workspace-metrics"><Metric label="Total customers" value={String(configured?rows.length:128)} note={configured?"Live business records":"Sample shop data"}/><Metric label="With outstanding khata" value={String(rows.filter(x=>x.balance>0).length)} note="Calculated from ledger"/><Metric label="Total outstanding" value={money(rows.reduce((n,x)=>n+x.balance,0))} note={configured?"Live ledger total":"Demo figure"}/></div>
   <div className="workspace-two-column">
    <section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Customer directory</h2><p>Search by customer name or phone.</p></div>{configured?<button className="subtle-button" onClick={()=>setAdding(!adding)}>{adding?"Cancel":"Add customer"}</button>:<span className="count-pill">{visible.length} shown</span>}</div>
-    {adding&&<form className="inline-create-form" onSubmit={create}><label>Customer name<input required maxLength={120} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"/></label><label>Phone (optional)<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+919876543210"/></label><button className="auth-submit" disabled={busy}>{busy?"Saving…":"Create customer"}</button></form>}
+    {adding&&<form className="inline-create-form" onSubmit={create}><label>Customer name<input required maxLength={120} value={name} onChange={e=>{setName(e.target.value);setCustomerKey(crypto.randomUUID());}} placeholder="Full name"/></label><label>Phone (optional)<input type="tel" value={phone} onChange={e=>{setPhone(e.target.value);setCustomerKey(crypto.randomUUID());}} placeholder="+919876543210"/></label><button className="auth-submit" disabled={busy}>{busy?"Saving…":"Create customer"}</button></form>}
     {error&&<p className="auth-error" role="alert">{error}</p>}<SearchBox value={query} onChange={setQuery} label="Customers"/>
     <div className="workspace-record-list">{visible.map(x=><button key={x.id} className={selected===x.id?"workspace-record selected":"workspace-record"} onClick={()=>setSelected(x.id)}><span className="record-avatar">{x.name.split(" ").map(n=>n[0]).slice(0,2).join("")}</span><span className="record-main"><strong>{x.name}</strong><small>{x.phone}</small></span><span className="record-amount">{money(x.balance)}<small>Customer</small></span></button>)}
     {!visible.length&&<div className="empty-inline">{configured?"No customers yet. Add your first customer above.":"No sample customers match your search."}</div>}</div>
@@ -99,7 +99,7 @@ function Ledger(){
 function Inventory(){
  const {business,configured}=useBusiness();
  const [rows,setRows]=useState<Product[]>(configured?[]:sampleProducts),[query,setQuery]=useState(""),[adding,setAdding]=useState(false);
- const [name,setName]=useState(""),[unit,setUnit]=useState("kg"),[price,setPrice]=useState(""),[stock,setStock]=useState("0"),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const [name,setName]=useState(""),[unit,setUnit]=useState("kg"),[price,setPrice]=useState(""),[stock,setStock]=useState("0"),[productKey,setProductKey]=useState(()=>crypto.randomUUID()),[busy,setBusy]=useState(false),[error,setError]=useState("");
  async function load(){
   if(!supabase||!business)return;
   const {data,error:e}=await supabase.from("products").select("id,name,unit_label,unit_price_paise,stock_on_hand").eq("business_id",business.id).eq("is_active",true).order("name");
@@ -115,15 +115,15 @@ function Inventory(){
   if(paise===null||paise<=0){setError("Enter a valid rupee price with up to two decimals.");return;}
   if(!Number.isFinite(qty)||qty<0||!/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/.test(stock)){setError("Opening stock must be non-negative with up to three decimals.");return;}
   setBusy(true);setError("");
-  const {error:e}=await supabase.functions.invoke("business-setup",{body:{action:"create_product",business_id:business.id,name:name.trim(),unit_label:unit,unit_price_paise:paise,opening_stock:qty}});
+  const {error:e}=await supabase.functions.invoke("business-setup",{body:{action:"create_product",business_id:business.id,name:name.trim(),unit_label:unit,unit_price_paise:paise,opening_stock:qty,idempotency_key:productKey}});
   if(e){setError("Product could not be created. Check the details and retry.");setBusy(false);return;}
-  setName("");setPrice("");setStock("0");setAdding(false);await load();setBusy(false);
+  setName("");setPrice("");setStock("0");setAdding(false);setProductKey(crypto.randomUUID());await load();setBusy(false);
  }
  return <>
   <Header eyebrow="CATALOGUE & STOCK" title="Inventory" description="See what is in stock and spot products that need attention." icon={Boxes}/>{!configured&&<Notice/>}
   <div className="workspace-metrics"><Metric label="Active products" value={String(configured?rows.length:248)} note={configured?"Live catalogue":"Sample catalogue"}/><Metric label="Low stock" value={String(configured?low:3)} note="At or below reorder threshold"/><Metric label="Out of stock" value={String(configured?out:1)} note="Needs replenishment"/></div>
   <section className="workspace-panel"><div className="workspace-panel-heading"><div><h2>Product catalogue</h2><p>Live stock levels and selling prices.</p></div>{configured?<button className="subtle-button" onClick={()=>setAdding(!adding)}>{adding?"Cancel":"Add product"}</button>:<span className="count-pill">{visible.length} shown</span>}</div>
-   {adding&&<form className="inline-create-form product-form" onSubmit={create}><label>Product name<input required maxLength={160} value={name} onChange={e=>setName(e.target.value)} placeholder="Basmati rice"/></label><label>Unit<select value={unit} onChange={e=>setUnit(e.target.value)}><option value="kg">kg</option><option value="litre">litre</option><option value="piece">piece</option><option value="packet">packet</option></select></label><label>Unit price (₹)<input required inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)} placeholder="150.00"/></label><label>Opening stock<input required inputMode="decimal" value={stock} onChange={e=>setStock(e.target.value)} placeholder="0"/></label><button className="auth-submit" disabled={busy}>{busy?"Saving…":"Create product"}</button></form>}
+   {adding&&<form className="inline-create-form product-form" onSubmit={create}><label>Product name<input required maxLength={160} value={name} onChange={e=>{setName(e.target.value);setProductKey(crypto.randomUUID());}} placeholder="Basmati rice"/></label><label>Unit<select value={unit} onChange={e=>{setUnit(e.target.value);setProductKey(crypto.randomUUID());}}><option value="kg">kg</option><option value="litre">litre</option><option value="piece">piece</option><option value="packet">packet</option></select></label><label>Unit price (₹)<input required inputMode="decimal" value={price} onChange={e=>{setPrice(e.target.value);setProductKey(crypto.randomUUID());}} placeholder="150.00"/></label><label>Opening stock<input required inputMode="decimal" value={stock} onChange={e=>{setStock(e.target.value);setProductKey(crypto.randomUUID());}} placeholder="0"/></label><button className="auth-submit" disabled={busy}>{busy?"Saving…":"Create product"}</button></form>}
    {error&&<p className="auth-error" role="alert">{error}</p>}<SearchBox value={query} onChange={setQuery} label="Products"/>
    <div className="ledger-table inventory-table"><div className="ledger-row ledger-head"><span>Product</span><span>SKU / ID</span><span>Stock</span><span>Unit price</span></div>{visible.map(x=><div className="ledger-row" key={x.id}><span className="ledger-person"><strong>{x.name}</strong><small>Sold by {x.unit}</small></span><span>{x.id.slice(0,8).toUpperCase()}</span><span><span className={x.stock===0?"stock-chip out":x.stock<=8?"stock-chip low":"stock-chip healthy"}>{x.stock===0?"Out of stock":x.stock<=8?"Low · "+x.stock:x.stock+" "+x.unit}</span></span><strong>{money(x.price)}</strong></div>)}</div>
    {!visible.length&&<div className="empty-inline">{configured?"No products yet. Add your first product above.":"No sample products match your search."}</div>}
