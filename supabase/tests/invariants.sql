@@ -305,6 +305,128 @@ begin
   if (select count(*) from public.businesses) <> 1 then raise exception 'second tenant visibility failed'; end if;
   if exists (select 1 from public.customers where id='123e4567-e89b-42d3-a456-426614174101') then raise exception 'cross-tenant access granted'; end if;
 end $$;
+
+-- Delivery creation, assignment and event transitions are idempotent and tenant-scoped.
+select public.create_delivery_job(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  'DLV-CI-001','Customer One',null,'12 Test Market, Kolkata',
+  100,1000,'ci-delivery-create-key-0001',true
+)->>'delivery_job_id' as delivery_job_id \gset delivery_
+select public.create_delivery_job(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  'DLV-CI-001','Customer One',null,'12 Test Market, Kolkata',
+  100,1000,'ci-delivery-create-key-0001',true
+)->>'delivery_job_id' as delivery_job_id \gset delivery_replay_
+select (:'delivery_delivery_job_id' = :'delivery_replay_delivery_job_id') as delivery_replayed \gset
+\if :delivery_replayed
+\echo 'PASS delivery creation idempotency replay'
+\else
+\echo 'FAIL delivery creation idempotency replay'
+\quit 1
+\endif
+select set_config('test.delivery_job_id', :'delivery_delivery_job_id', false);
+select public.assign_delivery_job(
+  '123e4567-e89b-42d3-a456-426614174100',
+  :'delivery_delivery_job_id'::uuid,
+  '123e4567-e89b-42d3-a456-426614174001',
+  true
+);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'picked_up');
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'in_transit');
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'cash_collected', 'Part payment', 500);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'cash_collected', 'Balance collected', 500);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'delivered');
+do $delivery_state_test$
+begin
+  if (select status from public.delivery_jobs where id=current_setting('test.delivery_job_id')::uuid) <> 'delivered' then
+    raise exception 'delivery status transition failed';
+  end if;
+  if (select sum(cash_collected_paise) from public.delivery_events where delivery_job_id=current_setting('test.delivery_job_id')::uuid) <> 1000 then
+    raise exception 'delivery cash collection total failed';
+  end if;
+  begin
+    perform public.record_delivery_event(
+      '123e4567-e89b-42d3-a456-426614174100',
+      current_setting('test.delivery_job_id')::uuid,'failed'
+    );
+    raise exception 'expected terminal delivery state rejection';
+  exception when sqlstate '22023' then null;
+  end;
+end $delivery_state_test$;
+
+-- Communication outbox rejects unknown/opted-out consent and protects retries.
+select public.set_customer_communication_preference(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  'whatsapp','opted_in','in_person_recorded',true
+);
+select public.queue_customer_notification(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  'whatsapp','delivery_update','delivery-status-v1',
+  '{"message":"Your delivery is on the way"}'::jsonb,
+  'ci-notification-key-0001',true
+)->>'notification_job_id' as notification_job_id \gset notification_
+select public.queue_customer_notification(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  'whatsapp','delivery_update','delivery-status-v1',
+  '{"message":"Your delivery is on the way"}'::jsonb,
+  'ci-notification-key-0001',true
+)->>'notification_job_id' as notification_job_id \gset notification_replay_
+select (:'notification_notification_job_id' = :'notification_replay_notification_job_id') as notification_replayed \gset
+\if :notification_replayed
+\echo 'PASS notification idempotency replay'
+\else
+\echo 'FAIL notification idempotency replay'
+\quit 1
+\endif
+do $notification_safety_test$
+begin
+  begin
+    perform public.queue_customer_notification(
+      '123e4567-e89b-42d3-a456-426614174100',
+      '123e4567-e89b-42d3-a456-426614174101',
+      'whatsapp','delivery_update','delivery-status-v1',
+      '{"message":"Different payload"}'::jsonb,
+      'ci-notification-key-0001',true
+    );
+    raise exception 'expected notification idempotency mismatch rejection';
+  exception when unique_violation then null;
+  end;
+end $notification_safety_test$;
+select public.set_customer_communication_preference(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  'whatsapp','opted_out','customer_requested',true
+);
+do $notification_optout_test$
+begin
+  begin
+    perform public.queue_customer_notification(
+      '123e4567-e89b-42d3-a456-426614174100',
+      '123e4567-e89b-42d3-a456-426614174101',
+      'whatsapp','payment_reminder','payment-reminder-v1',
+      '{"message":"Reminder"}'::jsonb,
+      'ci-notification-optout-0001',true
+    );
+    raise exception 'expected opt-out suppression';
+  exception when insufficient_privilege then null;
+  end;
+end $notification_optout_test$;
+
+do $reporting_test$
+begin
+  if not exists (
+    select 1 from public.business_daily_summary
+    where business_id='123e4567-e89b-42d3-a456-426614174100'
+      and credit_sales_count >= 1 and credit_sales_paise >= 15000
+  ) then raise exception 'India-time daily business summary missing expected sales'; end if;
+end $reporting_test$;
+
+
 reset role;
 \echo 'PASS tenant isolation, atomic stock/ledger, idempotency, reversals and append-only ledger'
 
