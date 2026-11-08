@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import VoiceWorkspace from "./voice/VoiceWorkspace";
 import WorkspacePage from "./features/WorkspacePage";
 import {
@@ -25,6 +25,17 @@ const activity = [
 export default function App() {
   const [active, setActive] = useState("Overview");
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   return (
     <div className="app-shell">
@@ -47,7 +58,7 @@ export default function App() {
         </div>
       </aside>
       <main className="main-area">
-        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>{active}</strong></div><div className="top-actions"><div className="search-box"><Search size={16} /><input aria-label="Search" placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button" aria-label="Notifications"><Bell size={18} /><i /></button><div className="top-avatar">PS</div></div></header>
+        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>{active}</strong></div><div className="top-actions"><span className={online ? "connection-chip online" : "connection-chip offline"} role="status"><i/>{online ? "Online" : "Offline · shell only"}</span><div className="search-box"><Search size={16} /><input aria-label="Search" placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button" aria-label="Notifications"><Bell size={18} /><i /></button><div className="top-avatar">PS</div></div></header>
         <div className="page-content">{active === "Overview" ? <>
           <section className="welcome-row"><div><div className="eyebrow"><span className="live-dot" /> YOUR BUSINESS AT A GLANCE</div><h1>Good morning, Priya <span>✳</span></h1><p>Here's what's happening with your store today.</p></div><button className="date-button">Today, 8 November <ChevronDown size={15} /></button></section>
           <section className="voice-banner"><div className="voice-orb"><Mic size={23} /></div><div className="voice-copy"><span className="voice-kicker">MEET YOUR BUSINESS ASSISTANT</span><h2>Your shop. Your language. Your pace.</h2><p>Speak naturally or type what you need. Boli-Khata is being built to make everyday shop work simpler.</p></div><button className="voice-button" onClick={() => setVoiceOpen(!voiceOpen)}><Mic size={17} /> Try voice workspace</button><div className="banner-decoration" /></section>
