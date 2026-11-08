@@ -69,7 +69,7 @@ function BusinessApp() {
         <div className="page-content">{active === "Overview" ? <>
           <section className="welcome-row"><div><div className="eyebrow"><span className="live-dot" /> YOUR BUSINESS AT A GLANCE</div><h1>Good morning, Priya <span>✳</span></h1><p>Here's what's happening with your store today.</p></div><button className="date-button">Today, 8 November <ChevronDown size={15} /></button></section>
           <section className="voice-banner"><div className="voice-orb"><Mic size={23} /></div><div className="voice-copy"><span className="voice-kicker">MEET YOUR BUSINESS ASSISTANT</span><h2>Your shop. Your language. Your pace.</h2><p>Speak naturally or type what you need. Boli-Khata is being built to make everyday shop work simpler.</p></div><button className="voice-button" onClick={() => setVoiceOpen(!voiceOpen)}><Mic size={17} /> Try voice workspace</button><div className="banner-decoration" /></section>
-          {voiceOpen && <VoiceWorkspace />}
+          {voiceOpen && <VoiceWorkspace onContinue={() => setActive("Sales & billing")} />}
           <section className="section-heading"><div><h2>Today's overview</h2><p>A quick look at your shop's activity.</p></div><button className="subtle-button">View reports <ArrowUpRight size={15} /></button></section>
           <section className="stats-grid">
             <article className="stat-card"><div className="stat-top"><span>Sales today</span><span className="stat-icon green"><ShoppingBag size={17} /></span></div><strong>₹12,840</strong><div className="stat-foot positive"><ArrowUpRight size={14} /> 12.8% <span>vs. yesterday</span></div><div className="sparkline green-line">{Array.from({length:12},(_,i)=><i key={i}/>)}</div></article>
