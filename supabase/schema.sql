@@ -300,6 +300,8 @@ declare
   v_reversal_id uuid;
   v_claimed integer;
   v_item record;
+  v_fingerprint text;
+  v_existing_fingerprint text;
 begin
   if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
   if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
