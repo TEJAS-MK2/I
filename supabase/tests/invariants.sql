@@ -88,7 +88,7 @@ end $$;
 do $$
 begin
   begin
-    update public.ledger_entries set amount_paise=1 where transaction_id=:'sale_sale_id'::uuid;
+    update public.ledger_entries set amount_paise=1 where transaction_id=current_setting('test.sale_id')::uuid;
     raise exception 'expected append-only rejection';
   exception when others then
     if sqlerrm = 'expected append-only rejection' then raise; end if;
