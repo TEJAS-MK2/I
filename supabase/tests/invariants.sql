@@ -325,11 +325,11 @@ select public.assign_delivery_job(
   '123e4567-e89b-42d3-a456-426614174001',
   true
 );
-select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'picked_up');
-select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'in_transit');
-select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'cash_collected', 'Part payment', 500);
-select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'cash_collected', 'Balance collected', 500);
-select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'delivered');
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'picked_up', null, null, true);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'in_transit', null, null, true);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'cash_collected', 'Part payment', 500, true);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'cash_collected', 'Balance collected', 500, true);
+select public.record_delivery_event('123e4567-e89b-42d3-a456-426614174100', :'delivery_delivery_job_id'::uuid, 'delivered', null, null, true);
 do $delivery_state_test$
 begin
   if (select status from public.delivery_jobs where id=current_setting('test.delivery_job_id')::uuid) <> 'delivered' then
@@ -341,7 +341,7 @@ begin
   begin
     perform public.record_delivery_event(
       '123e4567-e89b-42d3-a456-426614174100',
-      current_setting('test.delivery_job_id')::uuid,'failed'
+      current_setting('test.delivery_job_id')::uuid,'failed',null,null,true
     );
     raise exception 'expected terminal delivery state rejection';
   exception when sqlstate '22023' then null;
