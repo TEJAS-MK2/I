@@ -222,15 +222,6 @@ begin
   end if;
 end $payment_balance_test$;
 
-do $business_onboarding_key_mismatch$
-begin
-  begin
-    perform public.create_business('Different Shop','ci-business-onboarding-0001');
-    raise exception 'expected onboarding idempotency mismatch rejection';
-  exception when unique_violation then null;
-  end;
-end $business_onboarding_key_mismatch$;
-
 do $payment_key_mismatch_test$
 begin
   begin
@@ -452,4 +443,12 @@ begin
       and m.user_id='123e4567-e89b-42d3-a456-426614174003' and m.role='owner' and m.status='active'
   ) then raise exception 'business onboarding did not create owner membership'; end if;
 end $$;
+do $business_onboarding_key_mismatch$
+begin
+  begin
+    perform public.create_business('Different Shop','ci-business-onboarding-0001');
+    raise exception 'expected onboarding idempotency mismatch rejection';
+  exception when unique_violation then null;
+  end;
+end $business_onboarding_key_mismatch$;
 reset role;
