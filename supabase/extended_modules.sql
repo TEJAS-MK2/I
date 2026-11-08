@@ -30,6 +30,7 @@ create table if not exists public.voice_intent_proposals (
   schema_version integer not null default 1 check (schema_version > 0),
   intent text not null check (intent in ('credit_sale','payment','stock_adjustment','delivery_create','unknown')),
   proposal jsonb not null check (jsonb_typeof(proposal) = 'object'),
+  request_fingerprint text not null check (length(request_fingerprint) between 2 and 16000),
   confidence numeric(4,3) check (confidence between 0 and 1),
   ambiguity_flags text[] not null default '{}',
   status text not null default 'needs_review' check (status in ('needs_review','confirmed','rejected','committed','expired')),
@@ -652,5 +653,119 @@ revoke all on function public.set_customer_communication_preference(uuid,uuid,te
 revoke all on function public.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) from public, anon;
 grant execute on function public.set_customer_communication_preference(uuid,uuid,text,text,text,boolean) to authenticated;
 grant execute on function public.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) to authenticated;
+
+
+create or replace function private.create_voice_proposal(
+  p_business_id uuid,
+  p_language_tag text,
+  p_input_mode text,
+  p_transcript_text text,
+  p_intent text,
+  p_proposal jsonb,
+  p_confidence numeric,
+  p_ambiguity_flags text[],
+  p_idempotency_key text,
+  p_confirmed boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $voice$
+declare
+  v_actor uuid := auth.uid();
+  v_session_id uuid;
+  v_proposal_id uuid;
+  v_existing_session_id uuid;
+  v_existing_fingerprint text;
+  v_fingerprint text;
+  v_flags text[] := coalesce(p_ambiguity_flags, '{}');
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit review confirmation required' using errcode = '22023'; end if;
+  if not exists (
+    select 1 from public.business_memberships m
+    where m.business_id = p_business_id and m.user_id = v_actor
+      and m.status = 'active' and m.role in ('owner','admin','cashier')
+  ) then raise exception 'business access denied' using errcode = '42501'; end if;
+  if p_input_mode not in ('speech','text')
+    or p_intent not in ('credit_sale','payment','stock_adjustment','delivery_create','unknown')
+    or p_proposal is null or jsonb_typeof(p_proposal) is distinct from 'object'
+    or p_transcript_text is null or length(trim(p_transcript_text)) not between 1 and 8000
+    or p_language_tag is null or length(p_language_tag) not between 2 and 35
+    or (p_confidence is not null and p_confidence not between 0 and 1)
+    or cardinality(v_flags) > 20
+    or exists (select 1 from unnest(v_flags) f where length(f) not between 1 and 80)
+    or p_idempotency_key is null or length(p_idempotency_key) not between 16 and 128
+    or p_idempotency_key ~ '[^A-Za-z0-9._:-]' then
+    raise exception 'invalid voice proposal' using errcode = '22023';
+  end if;
+
+  v_fingerprint := jsonb_build_object(
+    'language_tag',p_language_tag,'input_mode',p_input_mode,
+    'transcript_text',trim(p_transcript_text),'intent',p_intent,
+    'proposal',p_proposal,'confidence',p_confidence,'ambiguity_flags',v_flags
+  )::text;
+  if length(v_fingerprint) > 16000 then raise exception 'voice proposal payload is too large' using errcode = '22023'; end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_business_id::text || ':' || v_actor::text || ':' || p_idempotency_key, 0)
+  );
+  select p.id, p.session_id, p.request_fingerprint
+    into v_proposal_id, v_existing_session_id, v_existing_fingerprint
+  from public.voice_intent_proposals p
+  where p.business_id = p_business_id and p.actor_id = v_actor and p.idempotency_key = p_idempotency_key;
+  if found then
+    if v_existing_fingerprint is distinct from v_fingerprint then
+      raise exception 'idempotency key reused with different voice proposal' using errcode = '23505';
+    end if;
+    return jsonb_build_object('proposal_id',v_proposal_id,'session_id',v_existing_session_id,'replayed',true);
+  end if;
+
+  insert into public.voice_sessions(
+    business_id, actor_id, language_tag, input_mode, status,
+    transcript_text, transcript_expires_at
+  ) values (
+    p_business_id, v_actor, p_language_tag, p_input_mode, 'reviewed',
+    trim(p_transcript_text), now() + interval '30 days'
+  ) returning id into v_session_id;
+
+  insert into public.voice_intent_proposals(
+    business_id, session_id, actor_id, intent, proposal, request_fingerprint,
+    confidence, ambiguity_flags, status, idempotency_key, reviewed_at
+  ) values (
+    p_business_id, v_session_id, v_actor, p_intent, p_proposal, v_fingerprint,
+    p_confidence, v_flags, 'confirmed', p_idempotency_key, now()
+  ) returning id into v_proposal_id;
+
+  insert into public.audit_events(business_id, actor_id, action, entity_type, entity_id, metadata)
+  values (p_business_id, v_actor, 'voice.proposal_saved', 'voice_intent_proposal', v_proposal_id,
+    jsonb_build_object('intent',p_intent,'input_mode',p_input_mode,'language_tag',p_language_tag));
+  return jsonb_build_object('proposal_id',v_proposal_id,'session_id',v_session_id,'replayed',false);
+end;
+$voice$;
+
+create or replace function public.create_voice_proposal(
+  p_business_id uuid,
+  p_language_tag text,
+  p_input_mode text,
+  p_transcript_text text,
+  p_intent text,
+  p_proposal jsonb,
+  p_confidence numeric,
+  p_ambiguity_flags text[],
+  p_idempotency_key text,
+  p_confirmed boolean
+) returns jsonb
+language sql
+security invoker
+set search_path = ''
+as $voice$
+  select private.create_voice_proposal($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+$voice$;
+
+revoke all on function private.create_voice_proposal(uuid,text,text,text,text,jsonb,numeric,text[],text,boolean) from public, anon;
+grant execute on function private.create_voice_proposal(uuid,text,text,text,text,jsonb,numeric,text[],text,boolean) to authenticated;
+revoke all on function public.create_voice_proposal(uuid,text,text,text,text,jsonb,numeric,text[],text,boolean) from public, anon;
+grant execute on function public.create_voice_proposal(uuid,text,text,text,text,jsonb,numeric,text[],text,boolean) to authenticated;
 
 commit;
