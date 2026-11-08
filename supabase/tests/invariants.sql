@@ -153,6 +153,84 @@ begin
   end;
 end $$;
 
+-- Payments reduce the khata balance; retries, overpayments and payment reversals are safe.
+select public.record_credit_sale(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  15000,'INR','ci-credit-sale-second-0001',
+  '[{"product_id":"123e4567-e89b-42d3-a456-426614174102","quantity":1,"unit_price_paise":15000}]'::jsonb,
+  true
+)->>'transaction_id' as transaction_id \gset second_sale_
+select set_config('test.second_sale_id', :'second_sale_transaction_id', false);
+
+select public.record_customer_payment(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  5000,'INR','ci-customer-payment-0001','cash',true
+)->>'transaction_id' as transaction_id \gset payment_
+select set_config('test.payment_id', :'payment_transaction_id', false);
+
+select public.record_customer_payment(
+  '123e4567-e89b-42d3-a456-426614174100',
+  '123e4567-e89b-42d3-a456-426614174101',
+  5000,'INR','ci-customer-payment-0001','cash',true
+)->>'transaction_id' as transaction_id \gset payment_replay_
+select (:'payment_transaction_id' = :'payment_replay_transaction_id') as payment_replayed \gset
+\if :payment_replayed
+\echo 'PASS payment idempotency replay'
+\else
+\echo 'FAIL payment idempotency replay'
+\quit 1
+\endif
+
+do $payment_balance_test$
+begin
+  if (select sum(amount_paise) from public.ledger_entries where customer_id='123e4567-e89b-42d3-a456-426614174101') <> 10000 then
+    raise exception 'payment did not reduce khata balance correctly';
+  end if;
+end $payment_balance_test$;
+
+do $payment_overpay_test$
+begin
+  begin
+    perform public.record_customer_payment(
+      '123e4567-e89b-42d3-a456-426614174100',
+      '123e4567-e89b-42d3-a456-426614174101',
+      20000,'INR','ci-payment-overpay-0001','upi',true
+    );
+    raise exception 'expected overpayment rejection';
+  exception when sqlstate '22023' then null;
+  end;
+end $payment_overpay_test$;
+
+select public.reverse_customer_payment(
+  '123e4567-e89b-42d3-a456-426614174100',
+  :'payment_transaction_id'::uuid,
+  'ci-payment-reversal-0001',
+  true
+)->>'transaction_id' as transaction_id \gset payment_reversal_
+select set_config('test.payment_reversal_id', :'payment_reversal_transaction_id', false);
+
+select public.reverse_credit_sale(
+  '123e4567-e89b-42d3-a456-426614174100',
+  :'second_sale_transaction_id'::uuid,
+  'ci-second-sale-reversal-0001',
+  true
+)->>'transaction_id' as transaction_id \gset second_reversal_
+
+do $payment_reversal_test$
+begin
+  if (select sum(amount_paise) from public.ledger_entries where customer_id='123e4567-e89b-42d3-a456-426614174101') <> 0 then
+    raise exception 'payment/sale reversals did not restore khata balance';
+  end if;
+  if (select stock_on_hand from public.products where id='123e4567-e89b-42d3-a456-426614174102') <> 5 then
+    raise exception 'second sale reversal did not restore stock';
+  end if;
+  if not exists (select 1 from public.ledger_entries where transaction_id=current_setting('test.payment_reversal_id')::uuid and entry_type='payment_reversal' and amount_paise=5000) then
+    raise exception 'payment reversal entry missing';
+  end if;
+end $payment_reversal_test$;
+
 select set_config('request.jwt.claim.sub','123e4567-e89b-42d3-a456-426614174002',false);
 do $$
 begin
