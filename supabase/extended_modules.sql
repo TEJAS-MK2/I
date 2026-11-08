@@ -118,6 +118,7 @@ create table if not exists public.notification_jobs (
   purpose text not null check (purpose in ('receipt','payment_reminder','delivery_update','general')),
   template_key text not null check (length(template_key) between 1 and 80),
   payload jsonb not null default '{}'::jsonb check (jsonb_typeof(payload) = 'object'),
+  request_fingerprint text not null check (length(request_fingerprint) between 2 and 12000),
   status text not null default 'queued' check (status in ('queued','processing','sent','failed','cancelled','suppressed')),
   idempotency_key text not null check (length(idempotency_key) between 16 and 128),
   scheduled_at timestamptz not null default now(),
@@ -484,5 +485,169 @@ revoke all on function public.record_delivery_event(uuid,uuid,text,text,bigint) 
 grant execute on function public.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) to authenticated;
 grant execute on function public.assign_delivery_job(uuid,uuid,uuid,boolean) to authenticated;
 grant execute on function public.record_delivery_event(uuid,uuid,text,text,bigint) to authenticated;
+
+
+-- Consent is recorded explicitly per customer and channel. Unknown consent is
+-- never treated as permission to send.
+create or replace function private.set_customer_communication_preference(
+  p_business_id uuid,
+  p_customer_id uuid,
+  p_channel text,
+  p_consent_status text,
+  p_consent_source text,
+  p_confirmed boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_actor uuid := auth.uid();
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
+  if p_channel not in ('whatsapp','sms','email')
+    or p_consent_status not in ('opted_in','opted_out')
+    or p_consent_source is null or length(trim(p_consent_source)) not between 1 and 80 then
+    raise exception 'invalid communication preference' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.business_memberships m
+    where m.business_id = p_business_id and m.user_id = v_actor
+      and m.status = 'active' and m.role in ('owner','admin','cashier')
+  ) then raise exception 'business access denied' using errcode = '42501'; end if;
+  if not exists (
+    select 1 from public.customers c where c.id = p_customer_id and c.business_id = p_business_id
+  ) then raise exception 'customer not found in this business' using errcode = '22023'; end if;
+
+  insert into public.customer_communication_preferences(
+    business_id, customer_id, channel, consent_status, consent_source, consent_recorded_at, updated_at
+  ) values (
+    p_business_id, p_customer_id, p_channel, p_consent_status, trim(p_consent_source), now(), now()
+  )
+  on conflict (business_id, customer_id, channel) do update set
+    consent_status = excluded.consent_status,
+    consent_source = excluded.consent_source,
+    consent_recorded_at = excluded.consent_recorded_at,
+    updated_at = now();
+
+  insert into public.audit_events(business_id, actor_id, action, entity_type, entity_id, metadata)
+  values (p_business_id, v_actor, 'customer.communication_consent.' || p_consent_status,
+    'customer', p_customer_id, jsonb_build_object('channel',p_channel,'source',trim(p_consent_source)));
+  return jsonb_build_object('customer_id',p_customer_id,'channel',p_channel,'consent_status',p_consent_status);
+end;
+$;
+
+create or replace function public.set_customer_communication_preference(
+  p_business_id uuid,
+  p_customer_id uuid,
+  p_channel text,
+  p_consent_status text,
+  p_consent_source text,
+  p_confirmed boolean
+) returns jsonb
+language sql
+security invoker
+set search_path = ''
+as $
+  select private.set_customer_communication_preference($1,$2,$3,$4,$5,$6);
+$;
+
+create or replace function private.queue_customer_notification(
+  p_business_id uuid,
+  p_customer_id uuid,
+  p_channel text,
+  p_purpose text,
+  p_template_key text,
+  p_payload jsonb,
+  p_idempotency_key text,
+  p_confirmed boolean
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_actor uuid := auth.uid();
+  v_job_id uuid;
+  v_fingerprint text;
+  v_existing_fingerprint text;
+  v_claimed integer;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
+  if not exists (
+    select 1 from public.business_memberships m
+    where m.business_id = p_business_id and m.user_id = v_actor
+      and m.status = 'active' and m.role in ('owner','admin','cashier')
+  ) then raise exception 'business access denied' using errcode = '42501'; end if;
+  if p_channel not in ('whatsapp','sms','email')
+    or p_purpose not in ('receipt','payment_reminder','delivery_update','general')
+    or p_template_key is null or length(p_template_key) not between 1 and 80
+    or jsonb_typeof(p_payload) is distinct from 'object'
+    or p_idempotency_key is null or p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128} then
+    raise exception 'invalid notification request' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.customer_communication_preferences cp
+    where cp.business_id = p_business_id and cp.customer_id = p_customer_id
+      and cp.channel = p_channel and cp.consent_status = 'opted_in'
+  ) then raise exception 'customer has not opted in to this channel' using errcode = '42501'; end if;
+
+  v_fingerprint := jsonb_build_object(
+    'customer_id',p_customer_id,'channel',p_channel,'purpose',p_purpose,
+    'template_key',p_template_key,'payload',p_payload
+  )::text;
+  insert into public.notification_jobs(
+    business_id, customer_id, channel, purpose, template_key, payload,
+    request_fingerprint, idempotency_key
+  ) values (
+    p_business_id, p_customer_id, p_channel, p_purpose, p_template_key,
+    p_payload, v_fingerprint, p_idempotency_key
+  )
+  on conflict (business_id, idempotency_key) do nothing
+  returning id into v_job_id;
+  get diagnostics v_claimed = row_count;
+  if v_claimed = 0 then
+    select n.id, n.request_fingerprint into v_job_id, v_existing_fingerprint
+    from public.notification_jobs n
+    where n.business_id = p_business_id and n.idempotency_key = p_idempotency_key;
+    if v_existing_fingerprint is distinct from v_fingerprint then
+      raise exception 'idempotency key reused with different notification payload' using errcode = '23505';
+    end if;
+    return jsonb_build_object('notification_job_id',v_job_id,'replayed',true);
+  end if;
+
+  insert into public.audit_events(business_id, actor_id, action, entity_type, entity_id)
+  values (p_business_id, v_actor, 'notification.queued', 'notification_job', v_job_id);
+  return jsonb_build_object('notification_job_id',v_job_id,'replayed',false);
+end;
+$;
+
+create or replace function public.queue_customer_notification(
+  p_business_id uuid,
+  p_customer_id uuid,
+  p_channel text,
+  p_purpose text,
+  p_template_key text,
+  p_payload jsonb,
+  p_idempotency_key text,
+  p_confirmed boolean
+) returns jsonb
+language sql
+security invoker
+set search_path = ''
+as $
+  select private.queue_customer_notification($1,$2,$3,$4,$5,$6,$7,$8);
+$;
+
+revoke all on function private.set_customer_communication_preference(uuid,uuid,text,text,text,boolean) from public, anon;
+revoke all on function private.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) from public, anon;
+grant execute on function private.set_customer_communication_preference(uuid,uuid,text,text,text,boolean) to authenticated;
+grant execute on function private.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) to authenticated;
+revoke all on function public.set_customer_communication_preference(uuid,uuid,text,text,text,boolean) from public, anon;
+revoke all on function public.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) from public, anon;
+grant execute on function public.set_customer_communication_preference(uuid,uuid,text,text,text,boolean) to authenticated;
+grant execute on function public.queue_customer_notification(uuid,uuid,text,text,text,jsonb,text,boolean) to authenticated;
 
 commit;
