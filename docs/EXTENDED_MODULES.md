@@ -8,10 +8,10 @@ Boli-Khata Supabase project.
 
 - **Voice review:** session metadata, language tag, bounded transcript storage,
   typed intent proposals, confidence, ambiguity flags and review lifecycle.
-- **Local logistics:** delivery jobs, active assignments, append-only delivery
-  events, collection amounts and private object keys for proof-of-delivery files.
-- **Customer communications:** per-channel consent state, notification outbox,
-  idempotency and append-only provider delivery attempts.
+- **Local logistics:** idempotent delivery creation, owner/admin assignment,
+  guarded status transitions, append-only events and cash-collection limits.
+- **Customer communications:** explicit per-channel opt-in/opt-out recording,
+  consent-gated idempotent notification queuing and append-only provider attempts.
 - **Audit:** append-only business-scoped events with actor, entity, request ID
   and structured metadata.
 - **Reporting:** a security-invoker daily summary grouped by India Standard Time
@@ -37,9 +37,11 @@ Boli-Khata Supabase project.
 
 Authentication is not being expanded in this milestone. The existing secure
 membership/RLS foundation is preserved rather than replaced with anonymous
-database access. Provider credentials, scheduled workers, messaging delivery,
-proof-of-delivery upload handlers, logistics mutation functions, and automated
-transcript-retention jobs are not configured by this schema alone.
+database access. Provider credentials, scheduled outbox workers, messaging delivery,
+proof-of-delivery upload handlers and automated transcript-retention jobs are
+not configured by this schema alone. The included delivery and notification
+queue RPCs are database primitives; they are not yet exposed through Edge
+Function endpoints or connected to the frontend.
 
 ## Required verification before enabling these workflows
 
@@ -47,11 +49,14 @@ transcript-retention jobs are not configured by this schema alone.
    database.
 2. Run SQL linting and integration tests for cross-business foreign-key rejection,
    RLS isolation, append-only triggers, notification consent enforcement and
-   India-time daily aggregation.
-3. Add server-side functions for each mutation; do not expose service-role keys.
-4. Test delivery state transitions and prevent terminal-state rewrites.
+   India-time daily aggregation. The repository CI applies this migration and
+   runs the extended SQL invariants.
+3. Expose the database RPCs through narrowly scoped Edge Function endpoints;
+   do not expose service-role keys.
+4. Keep testing delivery state transitions, terminal-state rewrites, cash
+   collection caps and assignment authorization.
 5. Test notification idempotency, opt-out suppression, retry limits and provider
-   webhook signature validation.
+   webhook signature validation before enabling a provider.
 6. Test transcript expiry and private object access.
 7. Deploy only after the dedicated hosted project and secret configuration exist.
 
