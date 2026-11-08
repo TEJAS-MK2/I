@@ -253,7 +253,7 @@ begin
     or p_delivery_address is null or length(trim(p_delivery_address)) not between 1 and 500
     or coalesce(p_delivery_fee_paise, -1) < 0
     or coalesce(p_cash_to_collect_paise, -1) < 0
-    or p_idempotency_key is null or p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128} then
+    or p_idempotency_key is null or length(p_idempotency_key) not between 16 and 128 or p_idempotency_key ~ '[^A-Za-z0-9._:-]' then
     raise exception 'invalid delivery details' using errcode = '22023';
   end if;
   if p_customer_id is not null and not exists (
@@ -585,7 +585,7 @@ begin
     or p_purpose not in ('receipt','payment_reminder','delivery_update','general')
     or p_template_key is null or length(p_template_key) not between 1 and 80
     or jsonb_typeof(p_payload) is distinct from 'object'
-    or p_idempotency_key is null or p_idempotency_key !~ '^[A-Za-z0-9._:-]{16,128} then
+    or p_idempotency_key is null or length(p_idempotency_key) not between 16 and 128 or p_idempotency_key ~ '[^A-Za-z0-9._:-]' then
     raise exception 'invalid notification request' using errcode = '22023';
   end if;
   if not exists (
