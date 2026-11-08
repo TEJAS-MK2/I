@@ -1,0 +1,87 @@
+name: Backend function and database checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/backend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  edge-functions:
+    name: Deno typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Resolve Deno dependencies
+        working-directory: supabase/functions
+        run: deno install
+      - name: Test Supabase publishable key resolution
+        run: deno test --allow-env supabase/functions/_shared/keys_test.ts
+      - name: Typecheck credit sale endpoint
+        run: deno check supabase/functions/record-credit-sale/index.ts
+      - name: Typecheck reversal endpoint
+        run: deno check supabase/functions/reverse-credit-sale/index.ts
+      - name: Typecheck business setup endpoint
+        run: deno check supabase/functions/business-setup/index.ts
+      - name: Typecheck customer payment endpoint
+        run: deno check supabase/functions/record-customer-payment/index.ts
+      - name: Typecheck payment reversal endpoint
+        run: deno check supabase/functions/reverse-customer-payment/index.ts
+      - name: Typecheck delivery operations endpoint
+        run: deno check supabase/functions/delivery-operations/index.ts
+      - name: Typecheck customer communication endpoint
+        run: deno check supabase/functions/customer-communication/index.ts
+      - name: Typecheck voice proposals endpoint
+        run: deno check supabase/functions/voice-proposals/index.ts
+      - name: Typecheck inventory operations endpoint
+        run: deno check supabase/functions/inventory-operations/index.ts
+
+  database:
+    name: Postgres security and transaction tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: boli_khata_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d boli_khata_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Bootstrap Supabase auth test surface
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d boli_khata_test -v ON_ERROR_STOP=1 -f supabase/tests/bootstrap.sql
+      - name: Apply schema in isolated CI database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d boli_khata_test -v ON_ERROR_STOP=1 -f supabase/schema.sql
+      - name: Apply extended business modules
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d boli_khata_test -v ON_ERROR_STOP=1 -f supabase/extended_modules.sql
+      - name: Verify tenant isolation and atomic ledger invariants
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d boli_khata_test -v ON_ERROR_STOP=1 -f supabase/tests/invariants.sql

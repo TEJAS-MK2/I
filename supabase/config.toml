@@ -1,0 +1,28 @@
+project_id = "boli-khata"
+
+[functions.record-credit-sale]
+verify_jwt = true
+
+[functions.reverse-credit-sale]
+verify_jwt = true
+
+[functions.business-setup]
+verify_jwt = true
+
+[functions.record-customer-payment]
+verify_jwt = true
+
+[functions.reverse-customer-payment]
+verify_jwt = true
+
+[functions.delivery-operations]
+verify_jwt = true
+
+[functions.customer-communication]
+verify_jwt = true
+
+[functions.voice-proposals]
+verify_jwt = true
+
+[functions.inventory-operations]
+verify_jwt = true
