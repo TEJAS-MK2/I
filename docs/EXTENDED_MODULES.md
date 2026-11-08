@@ -13,6 +13,7 @@ Boli-Khata Supabase project.
   guarded status transitions, append-only events and cash-collection limits.
 - **Customer communications:** explicit per-channel opt-in/opt-out recording,
   consent-gated idempotent notification queuing and append-only provider attempts.
+- **Inventory:** confirmed owner/admin stock adjustments with idempotency, non-negative stock enforcement and immutable movement records.
 - **Audit:** append-only business-scoped events with actor, entity, request ID
   and structured metadata.
 - **Reporting:** a security-invoker daily summary grouped by India Standard Time
@@ -45,6 +46,7 @@ JWT-verified Edge Function endpoints. They are not yet connected to the frontend
 
 ## API endpoints
 
+- `POST /functions/v1/inventory-operations`: confirmed stock adjustments.
 - `POST /functions/v1/voice-proposals`: save a reviewed voice/text proposal for later billing review.
 - `POST /functions/v1/delivery-operations`: create, assign and record delivery events.
 - `POST /functions/v1/customer-communication`: record channel consent and queue a notification.
