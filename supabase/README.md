@@ -34,6 +34,7 @@ The backend source in this directory is a reviewed implementation candidate. It 
 `functions/delivery-operations/index.ts` exposes confirmed delivery creation, owner/admin assignment and guarded delivery-event transitions.
 `functions/customer-communication/index.ts` records channel consent and queues notifications only after explicit opt-in.
 `functions/voice-proposals/index.ts` persists a user-reviewed voice/text proposal with idempotency; it never commits a financial transaction.
+`functions/inventory-operations/index.ts` exposes owner/admin-only confirmed stock adjustments with idempotency and non-negative stock enforcement.
 
 All handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
 
@@ -57,6 +58,12 @@ POST `/functions/v1/record-customer-payment`
 POST `/functions/v1/reverse-customer-payment`
 
 - `{"business_id":"UUID","original_transaction_id":"UUID","idempotency_key":"...","confirmed":true}`
+
+POST `/functions/v1/inventory-operations`
+
+- `{"business_id":"UUID","product_id":"UUID","quantity_delta":2.5,"note":"Physical count correction","idempotency_key":"stock-adjustment-unique-001","confirmed":true}`
+
+Positive deltas add stock; negative deltas remove stock. The database rejects underflow and records an immutable inventory movement plus an audit event.
 
 POST `/functions/v1/voice-proposals`
 
