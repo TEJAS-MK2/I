@@ -33,7 +33,9 @@ Make everyday business operations easier for people who are busy serving custome
 - [ ] Phase 5 transaction intelligence
 - [ ] Phase 6 customer communication
 - [ ] Phase 7 local logistics
-- [x] Additive voice-session, intent-review, delivery, consent, notification-outbox and audit schema source (not deployed)\n- [x] India-time daily business summary view source (security-invoker; not deployed)\n- [ ] Phase 8 production hardening
+- [x] Additive voice-session, intent-review, delivery, consent, notification-outbox and audit schema source (not deployed)
+- [x] India-time daily business summary view source (security-invoker; not deployed)
+- [ ] Phase 8 production hardening
 
 The repository contains environment-gated Supabase Auth (authentication work is deferred for this milestone), first-business onboarding, customer and product create flows, live customer/ledger/inventory query integration source, and an installable PWA shell. Without a dedicated project and environment variables, the app deliberately remains in clearly labelled sample preview mode. Its service worker caches only same-origin static app assets and never caches auth, database, function, storage or other API responses. Offline mode is shell-only; it does not queue or commit financial changes. The repository also contains CI-tested Postgres procedures and authenticated Edge Function source for idempotent business/customer/product setup, credit sales, sale reversals, customer payments and payment ledger reversals. These are not yet applied or deployed to a dedicated hosted Boli-Khata project. No production speech provider, payment integration or WhatsApp integration is configured yet.
 
@@ -53,7 +55,8 @@ Speech recognition will use a provider adapter so language coverage, latency, pr
 
 - [Development blueprint](docs/BLUEPRINT.md)
 - [PWA and offline behavior](docs/PWA.md)
-- [System architecture](docs/ARCHITECTURE.md)\n- [Extended business modules](docs/EXTENDED_MODULES.md)
+- [System architecture](docs/ARCHITECTURE.md)
+- [Extended business modules](docs/EXTENDED_MODULES.md)
 - [Security model](docs/SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
