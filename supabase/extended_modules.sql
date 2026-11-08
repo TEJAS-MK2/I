@@ -382,7 +382,8 @@ create or replace function private.record_delivery_event(
   p_delivery_job_id uuid,
   p_event_type text,
   p_note text,
-  p_cash_collected_paise bigint
+  p_cash_collected_paise bigint,
+  p_confirmed boolean
 ) returns jsonb
 language plpgsql
 security definer
@@ -396,6 +397,7 @@ declare
   v_collected bigint;
 begin
   if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_confirmed is distinct from true then raise exception 'explicit confirmation required' using errcode = '22023'; end if;
   if p_event_type not in ('picked_up','in_transit','delivered','failed','cancelled','returned','cash_collected','note_added') then
     raise exception 'unsupported delivery event' using errcode = '22023';
   end if;
@@ -464,24 +466,25 @@ create or replace function public.record_delivery_event(
   p_delivery_job_id uuid,
   p_event_type text,
   p_note text default null,
-  p_cash_collected_paise bigint default null
+  p_cash_collected_paise bigint default null,
+  p_confirmed boolean default false
 ) returns jsonb
 language sql
 security invoker
 set search_path = ''
 as $body$
-  select private.record_delivery_event($1,$2,$3,$4,$5);
+  select private.record_delivery_event($1,$2,$3,$4,$5,$6);
 $body$;
 
 revoke all on function private.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) from public, anon;
 revoke all on function private.assign_delivery_job(uuid,uuid,uuid,boolean) from public, anon;
-revoke all on function private.record_delivery_event(uuid,uuid,text,text,bigint) from public, anon;
+revoke all on function private.record_delivery_event(uuid,uuid,text,text,bigint,boolean) from public, anon;
 grant execute on function private.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) to authenticated;
 grant execute on function private.assign_delivery_job(uuid,uuid,uuid,boolean) to authenticated;
 grant execute on function private.record_delivery_event(uuid,uuid,text,text,bigint) to authenticated;
 revoke all on function public.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) from public, anon;
 revoke all on function public.assign_delivery_job(uuid,uuid,uuid,boolean) from public, anon;
-revoke all on function public.record_delivery_event(uuid,uuid,text,text,bigint) from public, anon;
+revoke all on function public.record_delivery_event(uuid,uuid,text,text,bigint,boolean) from public, anon;
 grant execute on function public.create_delivery_job(uuid,uuid,text,text,text,text,bigint,bigint,text,boolean) to authenticated;
 grant execute on function public.assign_delivery_job(uuid,uuid,uuid,boolean) to authenticated;
 grant execute on function public.record_delivery_event(uuid,uuid,text,text,bigint) to authenticated;
