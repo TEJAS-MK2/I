@@ -29,6 +29,6 @@ describe("workspace preview pages", () => {
 
   it("keeps billing non-committing until backend setup is complete", () => {
     render(<WorkspacePage active="Sales & billing" />);
-    expect(screen.getByText(/billing confirmation UI is still under development/i)).toBeInTheDocument();
+    expect(screen.getByText(/connect the dedicated backend environment to enable/i)).toBeInTheDocument();
   });
 });
