@@ -13,6 +13,8 @@ The backend source in this directory is a reviewed implementation candidate. It 
 - `business_transactions`, `transaction_items`, `ledger_entries` and `inventory_movements` are append-only.
 - Current product stock is a projection updated only inside the atomic transaction function; movement rows preserve the stock audit trail.
 - `record_credit_sale` performs the sale header, item rows, ledger entry and stock decrements in one Postgres transaction.
+- `reverse_credit_sale` appends a linked reversal, negative ledger entry and compensating stock movements; only owner/admin roles can reverse.
+- Idempotency keys are bound to a SHA-256 request fingerprint; reusing a key with a different payload is rejected.
 - Idempotency claims prevent duplicate commits on retries.
 - Client-facing tables have RLS and read-only grants. Direct client writes are intentionally unavailable.
 - The privileged write implementation lives in the unexposed `private` schema, is SECURITY DEFINER with an empty search path, explicitly checks `auth.uid()` and active business membership, and is called through a public SECURITY INVOKER wrapper granted only to authenticated users.
@@ -53,10 +55,10 @@ The caller must review the transcript, customer, currency, quantities and total,
 ## Not production-ready yet
 
 - Business/customer/product onboarding and invitations are not implemented.
-- Reversal RPC and UI are still required; the schema supports reversal records but does not expose a reversal command yet.
+- Reversal RPC is implemented and database-tested; the reversal UI and customer-facing balance history are still required.
 - No dedicated Boli-Khata Supabase project is provisioned or configured.
 - No secrets, authentication provider settings, email/SMS delivery, backups, monitoring, rate limits, or production deployment have been configured.
-- The SQL must be reviewed and tested with pgTAP against a dedicated development project before it is applied to production.
+- The SQL is currently executed against a disposable PostgreSQL 17 CI service with tenant-isolation, atomic stock/ledger, idempotency, reversal and append-only checks. A dedicated Supabase development project and Supabase-specific advisor review are still required before production deployment.
 
 ## Security release gates
 
