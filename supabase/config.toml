@@ -23,3 +23,6 @@ verify_jwt = true
 
 [functions.voice-proposals]
 verify_jwt = true
+
+[functions.inventory-operations]
+verify_jwt = true
