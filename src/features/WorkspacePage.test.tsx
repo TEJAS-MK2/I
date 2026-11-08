@@ -27,6 +27,12 @@ describe("workspace preview pages", () => {
     expect(screen.queryByText("Premium rice")).not.toBeInTheDocument();
   });
 
+  it("keeps payment recording unavailable in sample preview mode", () => {
+    render(<WorkspacePage active="Payments" />);
+    expect(screen.getByText("Payment preview")).toBeInTheDocument();
+    expect(screen.getByText(/connect the dedicated backend environment/i)).toBeInTheDocument();
+  });
+
   it("keeps billing non-committing until backend setup is complete", () => {
     render(<WorkspacePage active="Sales & billing" />);
     expect(screen.getByText(/connect the dedicated backend environment to enable/i)).toBeInTheDocument();
