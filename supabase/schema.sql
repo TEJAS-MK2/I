@@ -85,9 +85,10 @@ create table public.inventory_movements (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete restrict,
   product_id uuid not null,
-  transaction_id uuid not null references public.business_transactions(id) on delete restrict,
+  actor_id uuid not null references auth.users(id) on delete restrict,
+  transaction_id uuid references public.business_transactions(id) on delete restrict,
   quantity_delta numeric(14,3) not null check (quantity_delta <> 0),
-  reason text not null check (reason in ('credit_sale','reversal')),
+  reason text not null check (reason in ('opening_balance','credit_sale','reversal','stock_adjustment')),
   created_at timestamptz not null default now(),
   foreign key (business_id, product_id) references public.products(business_id, id) on delete restrict
 );
@@ -251,8 +252,8 @@ begin
 
     insert into public.transaction_items(business_id, transaction_id, product_id, quantity, unit_price_paise, line_total_paise)
     values (p_business_id, v_tx_id, v_item.product_id, v_item.quantity, v_item.unit_price_paise, v_line_total);
-    insert into public.inventory_movements(business_id, product_id, transaction_id, quantity_delta, reason)
-    values (p_business_id, v_item.product_id, v_tx_id, -v_item.quantity, 'credit_sale');
+    insert into public.inventory_movements(business_id, product_id, actor_id, transaction_id, quantity_delta, reason)
+    values (p_business_id, v_item.product_id, v_actor, v_tx_id, -v_item.quantity, 'credit_sale');
   end loop;
 
   insert into public.ledger_entries(business_id, customer_id, transaction_id, entry_type, amount_paise, currency)
@@ -357,8 +358,8 @@ begin
     if not found then raise exception 'original product no longer exists' using errcode = '23503'; end if;
     insert into public.transaction_items(business_id, transaction_id, product_id, quantity, unit_price_paise, line_total_paise)
     values (p_business_id, v_reversal_id, v_item.product_id, v_item.quantity, v_item.unit_price_paise, v_item.line_total_paise);
-    insert into public.inventory_movements(business_id, product_id, transaction_id, quantity_delta, reason)
-    values (p_business_id, v_item.product_id, v_reversal_id, v_item.quantity, 'reversal');
+    insert into public.inventory_movements(business_id, product_id, actor_id, transaction_id, quantity_delta, reason)
+    values (p_business_id, v_item.product_id, v_actor, v_reversal_id, v_item.quantity, 'reversal');
   end loop;
 
   update public.idempotency_claims set transaction_id = v_reversal_id
@@ -383,3 +384,104 @@ revoke all on function private.reverse_credit_sale(uuid, uuid, text, boolean) fr
 grant execute on function private.reverse_credit_sale(uuid, uuid, text, boolean) to authenticated;
 revoke all on function public.reverse_credit_sale(uuid, uuid, text, boolean) from public, anon;
 grant execute on function public.reverse_credit_sale(uuid, uuid, text, boolean) to authenticated;
+
+
+-- First-run business setup and master-data writes are also server-validated RPCs.
+create or replace function private.create_business(p_name text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_business_id uuid;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if p_name is null or length(trim(p_name)) not between 1 and 120 then raise exception 'business name is required' using errcode = '22023'; end if;
+  insert into public.businesses(name,currency) values (trim(p_name),'INR') returning id into v_business_id;
+  insert into public.business_memberships(business_id,user_id,role,status) values (v_business_id,v_actor,'owner','active');
+  return jsonb_build_object('business_id',v_business_id,'role','owner');
+end;
+$$;
+
+create or replace function public.create_business(p_name text)
+returns jsonb language sql security invoker set search_path = ''
+as $$ select private.create_business($1); $$;
+
+create or replace function private.create_customer(p_business_id uuid,p_display_name text,p_phone_e164 text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_customer_id uuid;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if not exists (select 1 from public.business_memberships m where m.business_id=p_business_id and m.user_id=v_actor and m.status='active' and m.role in ('owner','admin','cashier')) then
+    raise exception 'business access denied' using errcode = '42501';
+  end if;
+  if p_display_name is null or length(trim(p_display_name)) not between 1 and 120 then raise exception 'customer name is required' using errcode = '22023'; end if;
+  if p_phone_e164 is not null and p_phone_e164 !~ '^\\+[1-9][0-9]{7,14}$' then raise exception 'phone must be E.164 format' using errcode = '22023'; end if;
+  insert into public.customers(business_id,display_name,phone_e164)
+  values (p_business_id,trim(p_display_name),p_phone_e164) returning id into v_customer_id;
+  return jsonb_build_object('customer_id',v_customer_id);
+end;
+$$;
+
+create or replace function public.create_customer(p_business_id uuid,p_display_name text,p_phone_e164 text default null)
+returns jsonb language sql security invoker set search_path = ''
+as $$ select private.create_customer($1,$2,$3); $$;
+
+create or replace function private.create_product(
+  p_business_id uuid,p_name text,p_unit_label text,p_unit_price_paise bigint,p_opening_stock numeric default 0
+) returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_product_id uuid;
+begin
+  if v_actor is null then raise exception 'authentication required' using errcode = '28000'; end if;
+  if not exists (select 1 from public.business_memberships m where m.business_id=p_business_id and m.user_id=v_actor and m.status='active' and m.role in ('owner','admin')) then
+    raise exception 'business access denied' using errcode = '42501';
+  end if;
+  if p_name is null or length(trim(p_name)) not between 1 and 160 then raise exception 'product name is required' using errcode = '22023'; end if;
+  if p_unit_label is null or length(trim(p_unit_label)) not between 1 and 24 then raise exception 'unit label is required' using errcode = '22023'; end if;
+  if p_unit_price_paise is null or p_unit_price_paise <= 0 then raise exception 'unit price must be positive paise' using errcode = '22023'; end if;
+  if p_opening_stock is null or p_opening_stock < 0 or scale(p_opening_stock) > 3 then raise exception 'opening stock must be non-negative with at most three decimals' using errcode = '22023'; end if;
+  insert into public.products(business_id,name,unit_label,unit_price_paise,stock_on_hand)
+  values (p_business_id,trim(p_name),trim(p_unit_label),p_unit_price_paise,p_opening_stock)
+  returning id into v_product_id;
+  if p_opening_stock > 0 then
+    insert into public.inventory_movements(business_id,product_id,actor_id,transaction_id,quantity_delta,reason)
+    values (p_business_id,v_product_id,v_actor,null,p_opening_stock,'opening_balance');
+  end if;
+  return jsonb_build_object('product_id',v_product_id);
+end;
+$$;
+
+create or replace function public.create_product(
+  p_business_id uuid,p_name text,p_unit_label text,p_unit_price_paise bigint,p_opening_stock numeric default 0
+) returns jsonb
+language sql security invoker set search_path = ''
+as $$ select private.create_product($1,$2,$3,$4,$5); $$;
+
+revoke all on function private.create_business(text) from public, anon;
+grant execute on function private.create_business(text) to authenticated;
+revoke all on function public.create_business(text) from public, anon;
+grant execute on function public.create_business(text) to authenticated;
+
+revoke all on function private.create_customer(uuid,text,text) from public, anon;
+grant execute on function private.create_customer(uuid,text,text) to authenticated;
+revoke all on function public.create_customer(uuid,text,text) from public, anon;
+grant execute on function public.create_customer(uuid,text,text) to authenticated;
+
+revoke all on function private.create_product(uuid,text,text,bigint,numeric) from public, anon;
+grant execute on function private.create_product(uuid,text,text,bigint,numeric) to authenticated;
+revoke all on function public.create_product(uuid,text,text,bigint,numeric) from public, anon;
+grant execute on function public.create_product(uuid,text,text,bigint,numeric) to authenticated;
