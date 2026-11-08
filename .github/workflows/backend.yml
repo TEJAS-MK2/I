@@ -25,6 +25,9 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Resolve Deno dependencies
+        working-directory: supabase/functions
+        run: deno install
       - name: Typecheck credit sale endpoint
         run: deno check supabase/functions/record-credit-sale/index.ts
       - name: Typecheck reversal endpoint
