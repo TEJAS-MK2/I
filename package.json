@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": "^20.19.0 || >=22.12.0" },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -25,6 +27,6 @@
     "jsdom": "^25.0.1",
     "typescript": "~5.7.2",
     "vite": "^6.0.0",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.4"
   }
 }
