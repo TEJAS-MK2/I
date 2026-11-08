@@ -185,6 +185,7 @@ declare
   v_total bigint := 0;
   v_item record;
   v_line_total bigint;
+  v_catalog_price bigint;
   v_claimed integer;
   v_fingerprint text;
   v_existing_fingerprint text;
@@ -226,6 +227,12 @@ begin
       or scale(v_item.quantity) > 3 or v_item.unit_price_paise is null or v_item.unit_price_paise <= 0 then
       raise exception 'invalid item values' using errcode = '22023';
     end if;
+    select p.unit_price_paise into v_catalog_price
+      from public.products p
+      where p.id=v_item.product_id and p.business_id=p_business_id and p.is_active
+      for update;
+    if not found then raise exception 'product unavailable' using errcode = '22023'; end if;
+    if v_catalog_price <> v_item.unit_price_paise then raise exception 'product price changed; refresh and review the bill' using errcode = '22023'; end if;
     if v_item.quantity * v_item.unit_price_paise <> trunc(v_item.quantity * v_item.unit_price_paise) then
       raise exception 'item line total must resolve to whole paise' using errcode = '22023';
     end if;
