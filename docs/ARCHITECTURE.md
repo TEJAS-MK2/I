@@ -51,3 +51,12 @@ Wrap speech recognition, messaging and object storage behind interfaces. Keep cr
 ## Client data
 
 Server state is authoritative. IndexedDB is for drafts and constrained offline queueing, not an independent financial ledger. Revalidate pending writes before submission.
+
+
+## Voice provider boundary
+
+The browser speech implementation lives behind the `SpeechRecognitionProvider` interface in `src/voice/speech.ts`. The UI depends on the provider contract, not directly on browser globals, so a hosted speech-to-text provider can be introduced without changing proposal or transaction domain rules. Browser speech is a best-effort preview only; availability and language quality vary by browser and device.
+
+## Proposal validation boundary
+
+`src/voice/transactionValidation.ts` performs deterministic client-side completeness checks for customer, amount, currency and detected item fields. It is deliberately not a server authorization or commit boundary. Production work must repeat validation on the server using authenticated business membership, catalogue/customer resolution, role permissions, idempotency and a database transaction before any financial or stock mutation.
