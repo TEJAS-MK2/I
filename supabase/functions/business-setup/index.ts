@@ -40,9 +40,9 @@ Deno.serve(async (request: Request) => {
 
   let rpcName: string;
   let rpcArgs: Record<string, unknown>;
-  if (body.action === "create_business" && typeof body.name === "string") {
+  if (body.action === "create_business" && typeof body.name === "string" && typeof body.idempotency_key === "string") {
     rpcName = "create_business";
-    rpcArgs = { p_name: body.name };
+    rpcArgs = { p_name: body.name, p_idempotency_key: body.idempotency_key };
   } else if (body.action === "create_customer"
     && typeof body.business_id === "string" && typeof body.display_name === "string"
     && (body.phone_e164 === null || body.phone_e164 === undefined || typeof body.phone_e164 === "string")) {
