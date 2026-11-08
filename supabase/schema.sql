@@ -1,7 +1,5 @@
 -- Boli-Khata core schema (reviewed source; not yet applied to a hosted project).
 -- Target: Supabase Postgres 17. Apply only to a dedicated Boli-Khata project after review.
-create extension if not exists pgcrypto;
-
 create schema if not exists private;
 revoke all on schema private from public, anon;
 grant usage on schema private to authenticated;
@@ -99,7 +97,7 @@ create table public.idempotency_claims (
   actor_id uuid not null references auth.users(id) on delete restrict,
   idempotency_key text not null check (length(idempotency_key) between 16 and 128),
   transaction_id uuid references public.business_transactions(id) on delete restrict,
-  request_fingerprint text not null check (length(request_fingerprint) = 64),
+  request_fingerprint text not null check (length(request_fingerprint) between 2 and 16000),
   created_at timestamptz not null default now(),
   primary key (business_id, actor_id, idempotency_key)
 );
@@ -206,7 +204,7 @@ begin
     raise exception 'customer not found in this business' using errcode = '22023';
   end if;
 
-  v_fingerprint := encode(public.digest(jsonb_build_object('customer_id',p_customer_id,'amount_paise',p_amount_paise,'currency',p_currency,'items',p_items)::text,'sha256'),'hex');
+  v_fingerprint := jsonb_build_object('customer_id',p_customer_id,'amount_paise',p_amount_paise,'currency',p_currency,'items',p_items)::text;
   insert into public.idempotency_claims(business_id, actor_id, idempotency_key, request_fingerprint)
   values (p_business_id, v_actor, p_idempotency_key, v_fingerprint)
   on conflict do nothing;
@@ -315,7 +313,7 @@ begin
       and m.status = 'active' and m.role in ('owner','admin')
   ) then raise exception 'business access denied' using errcode = '42501'; end if;
 
-  v_fingerprint := encode(public.digest(jsonb_build_object('original_transaction_id',p_original_transaction_id)::text,'sha256'),'hex');
+  v_fingerprint := jsonb_build_object('original_transaction_id',p_original_transaction_id)::text;
   insert into public.idempotency_claims(business_id, actor_id, idempotency_key, request_fingerprint)
   values (p_business_id, v_actor, p_idempotency_key, v_fingerprint)
   on conflict do nothing;
