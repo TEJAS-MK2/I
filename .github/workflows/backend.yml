@@ -38,6 +38,10 @@ jobs:
         run: deno check supabase/functions/record-customer-payment/index.ts
       - name: Typecheck payment reversal endpoint
         run: deno check supabase/functions/reverse-customer-payment/index.ts
+      - name: Typecheck delivery operations endpoint
+        run: deno check supabase/functions/delivery-operations/index.ts
+      - name: Typecheck customer communication endpoint
+        run: deno check supabase/functions/customer-communication/index.ts
 
   database:
     name: Postgres security and transaction tests
