@@ -227,7 +227,10 @@ begin
       or scale(v_item.quantity) > 3 or v_item.unit_price_paise is null or v_item.unit_price_paise <= 0 then
       raise exception 'invalid item values' using errcode = '22023';
     end if;
-    v_line_total := round(v_item.quantity * v_item.unit_price_paise)::bigint;
+    if v_item.quantity * v_item.unit_price_paise <> trunc(v_item.quantity * v_item.unit_price_paise) then
+      raise exception 'item line total must resolve to whole paise' using errcode = '22023';
+    end if;
+    v_line_total := (v_item.quantity * v_item.unit_price_paise)::bigint;
     if v_line_total <= 0 then raise exception 'item line total must be positive' using errcode = '22023'; end if;
     v_total := v_total + v_line_total;
   end loop;
