@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getPublishableApiKey } from "../_shared/keys.ts";
 const cors={ "Access-Control-Allow-Origin":Deno.env.get("APP_ORIGIN")??"http://localhost:5173","Access-Control-Allow-Headers":"authorization, apikey, content-type, x-client-info","Access-Control-Allow-Methods":"POST, OPTIONS","Vary":"Origin" };
 const json=(status:number,body:Record<string,unknown>)=>new Response(JSON.stringify(body),{status,headers:{...cors,"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"}});
 Deno.serve(async(request:Request)=>{
@@ -6,7 +7,7 @@ Deno.serve(async(request:Request)=>{
  if(request.method!=="POST")return json(405,{error:"method_not_allowed"});
  const token=request.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
  if(!token)return json(401,{error:"authentication_required"});
- const url=Deno.env.get("SUPABASE_URL"),key=Deno.env.get("SUPABASE_PUBLISHABLE_KEY")??Deno.env.get("SUPABASE_ANON_KEY");
+ const url=Deno.env.get("SUPABASE_URL"),key=getPublishableApiKey();
  if(!url||!key)return json(503,{error:"backend_not_configured"});
  const client=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:`Bearer ${token}`}}});
  const {data:auth,error:authError}=await client.auth.getUser(token);
