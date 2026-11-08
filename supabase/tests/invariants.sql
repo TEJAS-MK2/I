@@ -83,6 +83,22 @@ begin
   end;
 end $idem_test$;
 
+-- A stale or client-tampered catalogue price cannot be used for a sale.
+do $stale_price_test$
+begin
+  begin
+    perform public.record_credit_sale(
+      '123e4567-e89b-42d3-a456-426614174100',
+      '123e4567-e89b-42d3-a456-426614174101',
+      29998,'INR','ci-stale-price-sale-0001',
+      '[{"product_id":"123e4567-e89b-42d3-a456-426614174102","quantity":2,"unit_price_paise":14999}]'::jsonb,
+      true
+    );
+    raise exception 'expected stale-price rejection';
+  exception when sqlstate '22023' then null;
+  end;
+end $stale_price_test$;
+
 -- Authenticated clients cannot write ledger rows directly around the atomic RPC.
 do $direct_write_test$
 begin
