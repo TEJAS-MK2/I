@@ -455,6 +455,58 @@ begin
   end;
 end $voice_proposal_safety_test$;
 
+
+-- Stock adjustments are owner/admin-only, confirmed, idempotent and append-only.
+select public.adjust_stock(
+  '123e4567-e89b-42d3-a456-426614174100',
+  current_setting('test.created_product')::uuid,
+  2.5,'Supplier count correction','ci-stock-adjustment-0001',true
+)->>'stock_on_hand' as stock_after \gset stock_adjust_
+select public.adjust_stock(
+  '123e4567-e89b-42d3-a456-426614174100',
+  current_setting('test.created_product')::uuid,
+  2.5,'Supplier count correction','ci-stock-adjustment-0001',true
+)->>'stock_on_hand' as stock_after \gset stock_adjust_replay_
+select (:'stock_adjust_stock_after' = :'stock_adjust_replay_stock_after') as stock_adjustment_replayed \gset
+\if :stock_adjustment_replayed
+\echo 'PASS stock adjustment idempotency replay'
+\else
+\echo 'FAIL stock adjustment idempotency replay'
+\quit 1
+\endif
+do $stock_adjustment_safety_test$
+begin
+  if (select stock_on_hand from public.products where id=current_setting('test.created_product')::uuid) <> 6.5 then
+    raise exception 'stock adjustment quantity was not applied';
+  end if;
+  if (select count(*) from public.inventory_movements
+      where product_id=current_setting('test.created_product')::uuid
+        and reason='stock_adjustment' and quantity_delta=2.5) <> 1 then
+    raise exception 'stock adjustment movement duplicated or missing';
+  end if;
+  begin
+    perform public.adjust_stock(
+      '123e4567-e89b-42d3-a456-426614174100',
+      current_setting('test.created_product')::uuid,
+      3,'Different adjustment','ci-stock-adjustment-0001',true
+    );
+    raise exception 'expected stock adjustment idempotency mismatch';
+  exception when unique_violation then null;
+  end;
+  begin
+    perform public.adjust_stock(
+      '123e4567-e89b-42d3-a456-426614174100',
+      current_setting('test.created_product')::uuid,
+      -100,'Reject negative stock','ci-stock-adjustment-underflow-0001',true
+    );
+    raise exception 'expected negative stock rejection';
+  exception when sqlstate '22023' then null;
+  end;
+  if (select stock_on_hand from public.products where id=current_setting('test.created_product')::uuid) <> 6.5 then
+    raise exception 'failed stock adjustment changed inventory';
+  end if;
+end $stock_adjustment_safety_test$;
+
 do $reporting_test$
 begin
   if not exists (
