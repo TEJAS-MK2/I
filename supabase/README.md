@@ -33,6 +33,7 @@ The backend source in this directory is a reviewed implementation candidate. It 
 `functions/reverse-customer-payment/index.ts` exposes owner/admin-only payment ledger reversal.
 `functions/delivery-operations/index.ts` exposes confirmed delivery creation, owner/admin assignment and guarded delivery-event transitions.
 `functions/customer-communication/index.ts` records channel consent and queues notifications only after explicit opt-in.
+`functions/voice-proposals/index.ts` persists a user-reviewed voice/text proposal with idempotency; it never commits a financial transaction.
 
 All handlers use the caller JWT and publishable key; none uses a service-role/secret key. Keep JWT verification enabled when deploying them.
 
@@ -56,6 +57,12 @@ POST `/functions/v1/record-customer-payment`
 POST `/functions/v1/reverse-customer-payment`
 
 - `{"business_id":"UUID","original_transaction_id":"UUID","idempotency_key":"...","confirmed":true}`
+
+POST `/functions/v1/voice-proposals`
+
+- `{"business_id":"UUID","language_tag":"hi-IN","input_mode":"speech","transcript_text":"Ramesh ₹150 udhar, 2 kg sugar","intent":"credit_sale","proposal":{"customer_name":"Ramesh","amount_paise":15000,"currency":"INR","items":[{"name":"sugar","quantity":"2","unit":"kg"}]},"confidence":null,"ambiguity_flags":[],"idempotency_key":"voice-proposal-unique-001","confirmed":true}`
+
+This saves a review record only. It does not create a sale, ledger entry, payment or stock movement.
 
 POST `/functions/v1/delivery-operations`
 
@@ -97,6 +104,7 @@ The caller must review the transcript, customer, currency, quantities and total,
 - Business onboarding and customer/product creation RPCs are implemented and covered by isolated PostgreSQL CI; invitation and staff-membership lifecycle are still missing.
 - Reversal RPC and Edge Function source are implemented; the reversal UI and customer-facing balance history are still required.
 - No dedicated Boli-Khata Supabase project is provisioned or configured.
+- Voice proposals are persisted as review records, but customer/product matching and a direct proposal-to-billing handoff remain to be completed. Transcript expiry is recorded as 30 days; automated deletion is not yet configured.
 - No dedicated provider dispatch worker, messaging provider credentials, email/SMS/WhatsApp delivery, backups, monitoring, rate limits, or production deployment have been configured.
 - The SQL is currently executed against a disposable PostgreSQL 17 CI service with tenant-isolation, atomic stock/ledger, idempotency, reversal and append-only checks. A dedicated Supabase development project and Supabase-specific advisor review are still required before production deployment.
 
