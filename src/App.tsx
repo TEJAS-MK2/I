@@ -7,7 +7,7 @@ import BusinessOnboarding from "./business/BusinessOnboarding";
 import {
   Activity, ArrowUpRight, Bell, BookOpen, Boxes, ChevronDown, CircleHelp,
   Command, CreditCard, LayoutDashboard, Mic, Package, Plus, Search,
-  Settings2, ShoppingBag, Sparkles, Users, Wallet, Zap,
+  Settings2, ShoppingBag, Sparkles, Users, Wallet, Zap, Truck, MessageCircle,
 } from "lucide-react";
 
 const nav = [
@@ -17,6 +17,8 @@ const nav = [
   { label: "Inventory", icon: Boxes },
   { label: "Sales & billing", icon: ShoppingBag },
   { label: "Payments", icon: Wallet },
+  { label: "Deliveries", icon: Truck },
+  { label: "Communications", icon: MessageCircle },
 ];
 
 const activity = [
