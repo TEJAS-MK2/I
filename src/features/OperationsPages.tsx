@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowUpRight, MessageCircle, Truck } from "lucide-react";
+import { Activity, ArrowUpRight, BarChart3, MessageCircle, Truck } from "lucide-react";
 import { useBusiness } from "../business/BusinessContext";
 import { supabase } from "../lib/supabase";
 import { rupeesToPaise } from "../domain/transaction";
@@ -214,5 +214,59 @@ export function CommunicationsPage() {
     </div>
     {error && <p className="auth-error" role="alert">{error}</p>}
     {success && <p className="auth-success" role="status">{success}</p>}
+  </>;
+}
+
+
+type DailySummary = {
+  business_date: string;
+  credit_sales_count: number;
+  credit_sales_paise: number;
+  payments_count: number;
+  payments_received_paise: number;
+};
+
+export function ReportsPage() {
+  const { business, configured } = useBusiness();
+  const [rows, setRows] = useState<DailySummary[]>([]);
+  const [error, setError] = useState("");
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+
+  useEffect(() => {
+    if (!supabase || !business) return;
+    let active = true;
+    void (async () => {
+      const { data, error: queryError } = await supabase.from("business_daily_summary")
+        .select("business_date,credit_sales_count,credit_sales_paise,payments_count,payments_received_paise")
+        .eq("business_id", business.id).order("business_date", { ascending: false }).limit(30);
+      if (!active) return;
+      if (queryError) { setError("Daily business summary could not be loaded."); return; }
+      setRows((data ?? []) as DailySummary[]);
+    })();
+    return () => { active = false; };
+  }, [business?.id]);
+
+  const todayRow = rows.find(row => row.business_date === today);
+  const sales = rows.reduce((sum, row) => sum + Number(row.credit_sales_paise), 0);
+  const receipts = rows.reduce((sum, row) => sum + Number(row.payments_received_paise), 0);
+  const salesCount = rows.reduce((sum, row) => sum + Number(row.credit_sales_count), 0);
+
+  return <>
+    <PageHeader icon={BarChart3} eyebrow="BUSINESS INTELLIGENCE" title="Reports" description="Review daily credit sales and customer receipts, grouped by India Standard Time."/>
+    {!configured && <div className="demo-notice"><span className="live-dot"/> Preview mode · Daily totals will appear when the backend is connected.</div>}
+    <div className="workspace-metrics">
+      <article className="workspace-metric"><small>Today's credit sales</small><strong>{money(configured ? Number(todayRow?.credit_sales_paise ?? 0) : 1250000)}</strong><span>{configured ? `${todayRow?.credit_sales_count ?? 0} transactions` : "Sample shop data"}</span></article>
+      <article className="workspace-metric"><small>Today's receipts</small><strong>{money(configured ? Number(todayRow?.payments_received_paise ?? 0) : 540000)}</strong><span>{configured ? `${todayRow?.payments_count ?? 0} receipts` : "Sample shop data"}</span></article>
+      <article className="workspace-metric"><small>30-day credit sales</small><strong>{money(configured ? sales : 8425000)}</strong><span>{configured ? `${salesCount} transactions` : "Sample shop data"}</span></article>
+      <article className="workspace-metric"><small>30-day receipts</small><strong>{money(configured ? receipts : 4250000)}</strong><span>Ledger-based totals</span></article>
+    </div>
+    <section className="workspace-panel">
+      <div className="workspace-panel-heading"><div><h2>Daily activity</h2><p>Last 30 business dates · Asia/Kolkata</p></div><span className="count-pill">{configured ? rows.length : 30} days</span></div>
+      {error && <p className="auth-error" role="alert">{error}</p>}
+      {!configured ? <div className="empty-inline">Connect a backend to view real daily totals.</div> :
+        rows.length ? <div className="reports-table-wrap"><table className="reports-table"><thead><tr><th>Business date</th><th>Credit sales</th><th>Sales total</th><th>Receipts</th><th>Received</th></tr></thead><tbody>{rows.map(row=><tr key={row.business_date}><td>{new Date(row.business_date+"T00:00:00+05:30").toLocaleDateString("en-IN",{dateStyle:"medium"})}</td><td>{row.credit_sales_count}</td><td>{money(Number(row.credit_sales_paise))}</td><td>{row.payments_count}</td><td>{money(Number(row.payments_received_paise))}</td></tr>)}</tbody></table></div> :
+        <div className="empty-inline">No daily activity has been recorded yet.</div>}
+    </section>
+    <p className="detail-footnote"><Activity size={13}/> Totals are grouped by business date in India Standard Time and read from the security-invoker summary view.</p>
   </>;
 }
