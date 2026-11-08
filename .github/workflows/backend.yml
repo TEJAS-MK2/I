@@ -1,0 +1,31 @@
+name: Backend function checks
+
+on:
+  push:
+    branches: [main, "phase-1/**"]
+    paths:
+      - "supabase/functions/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - ".github/workflows/backend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  edge-functions:
+    name: Deno typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck credit sale endpoint
+        run: deno check supabase/functions/record-credit-sale/index.ts
+      - name: Typecheck reversal endpoint
+        run: deno check supabase/functions/reverse-credit-sale/index.ts
