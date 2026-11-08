@@ -5,6 +5,9 @@
 -- anonymous database access. All writes remain server-mediated.
 begin;
 
+create unique index if not exists business_transactions_business_id_id_uidx
+  on public.business_transactions(business_id, id);
+
 create table if not exists public.voice_sessions (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete restrict,
@@ -30,11 +33,12 @@ create table if not exists public.voice_intent_proposals (
   confidence numeric(4,3) check (confidence between 0 and 1),
   ambiguity_flags text[] not null default '{}',
   status text not null default 'needs_review' check (status in ('needs_review','confirmed','rejected','committed','expired')),
-  committed_transaction_id uuid references public.business_transactions(id) on delete restrict,
+  committed_transaction_id uuid,
   idempotency_key text not null check (length(idempotency_key) between 16 and 128),
   created_at timestamptz not null default now(),
   reviewed_at timestamptz,
   foreign key (business_id, session_id) references public.voice_sessions(business_id, id) on delete restrict,
+  foreign key (business_id, committed_transaction_id) references public.business_transactions(business_id, id) on delete restrict,
   unique (business_id, actor_id, idempotency_key)
 );
 
@@ -117,6 +121,7 @@ create table if not exists public.notification_jobs (
   processed_at timestamptz,
   created_at timestamptz not null default now(),
   foreign key (business_id, customer_id) references public.customers(business_id, id) on delete restrict,
+  unique (business_id, id),
   unique (business_id, idempotency_key)
 );
 
